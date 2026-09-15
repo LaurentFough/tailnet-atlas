@@ -30,6 +30,13 @@
   .brand{display:flex;align-items:center;gap:11px;font-size:12px;letter-spacing:.16em;
     text-transform:uppercase;color:var(--muted)}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:beat 2.6s infinite}
+  .switcher{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .switcher:empty{display:none}
+  .switcher button{font:11px/1 var(--sans);letter-spacing:.04em;text-transform:uppercase;
+    padding:6px 12px;border-radius:999px;border:1px solid var(--line-2);
+    background:var(--surface);color:var(--muted);cursor:pointer;transition:.15s}
+  .switcher button:hover{color:var(--ink);border-color:var(--accent)}
+  .switcher button.on{background:var(--accent);border-color:var(--accent);color:var(--bg)}
   @keyframes beat{0%{box-shadow:0 0 0 0 rgba(61,220,151,.5)}70%{box-shadow:0 0 0 9px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
   h1{font-size:clamp(26px,4vw,40px);margin:6px 0 4px;letter-spacing:-.02em;font-weight:650}
   .grad{background:linear-gradient(96deg,var(--accent),var(--accent-2));
@@ -147,7 +154,8 @@
 <div class="wrap">
   <div class="head">
     <div>
-      <div class="brand"><span class="dot"></span> Tailnet __TAILNET__</div>
+      <div class="brand"><span class="dot"></span> Tailnet <span id="brand-name">__TAILNET__</span></div>
+      <div class="switcher" id="switcher"></div>
       <h1>Access as <span class="grad">Geography</span></h1>
       <p class="lede">Devices grouped by where they physically sit. Lines are grants —
         directed: the source initiates, the target never answers back.</p>
@@ -218,7 +226,7 @@
       <p>Nothing here is hand-assigned — every device is re-located on each refresh.</p></div>
     <div class="panel"><table class="tbl">
       <thead><tr><th>Step</th><th>Rule</th><th>Why</th></tr></thead>
-      <tbody>__RULE_ROWS__</tbody>
+      <tbody id="tb-rules">__RULE_ROWS__</tbody>
     </table></div>
     <p class="note" style="margin:12px 2px 0">__RULE_NOTE__</p>
   </section>
@@ -233,8 +241,10 @@
 <script>
 (function () {
   var NODES = __NODES__, EDGES = __EDGES__, SITES = __SITES__;
+  var TAILNETS = __TAILNETS_JSON__, CURRENT_NET = "__SLUG__";
   var cv = document.getElementById('cv'), stage = document.getElementById('stage');
   var tip = document.getElementById('tip'), legendEl = document.getElementById('legend');
+  var switcherEl = document.getElementById('switcher');
   var ctx = cv.getContext('2d');
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   var W = 0, H = 0, dpr = 1, hover = null, pinned = null, hidden = {};
@@ -605,7 +615,7 @@
   var siteOf = {};
   SITES.forEach(function (s, i) { s.ph = i * 1.7; s.dx = 0; s.dy = 0; siteOf[s.id] = s; });
   new ResizeObserver(resize).observe(stage);
-  resize(); buildLegend();
+  resize(); buildLegend(); buildSwitcher();
   requestAnimationFrame(frame);
   /* ---- live updates -------------------------------------------------
      The page polls a data-only endpoint while you are looking at it. The
@@ -667,13 +677,45 @@
     };
     body('tb-devices', s.rows.devices); body('tb-grants', s.rows.grants);
     body('tb-sites', s.rows.sites); body('tb-users', s.rows.users);
+    if (s.rows.rules) body('tb-rules', s.rows.rules);
     if (stampEl) stampEl.textContent = 'atlas.live · ' + s.stamp;
+    if (s.tailnet) {
+      var brandEl = document.getElementById('brand-name');
+      if (brandEl) brandEl.textContent = s.tailnet;
+      document.title = 'Tailnet Atlas — ' + (s.tailnetShort || s.tailnet);
+    }
 
     place(); buildLegend();
   }
 
+  /* ---- tailnet switcher ----------------------------------------------
+     Several tailnets can share this one page. Switching just re-fetches
+     the data-only endpoint for the other slug and reuses apply() — the
+     same path the 10s live poll already takes. */
+  function buildSwitcher() {
+    if (!switcherEl || TAILNETS.length < 2) return;
+    switcherEl.innerHTML = '';
+    TAILNETS.forEach(function (t) {
+      var b = document.createElement('button');
+      b.textContent = t.label;
+      b.className = t.slug === CURRENT_NET ? 'on' : '';
+      b.addEventListener('click', function () { switchNet(t.slug); });
+      switcherEl.appendChild(b);
+    });
+  }
+
+  function switchNet(slug) {
+    if (slug === CURRENT_NET) return;
+    CURRENT_NET = slug;
+    var url = new URL(location.href);
+    url.searchParams.set('net', slug);
+    history.replaceState(null, '', url);
+    buildSwitcher();
+    poll();
+  }
+
   function poll() {
-    fetch('api/state', { cache: 'no-store' })
+    fetch('api/state?net=' + encodeURIComponent(CURRENT_NET), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (s) {
         if (s.error) { setLive('· stale (' + s.error + ')', 'warn'); return; }

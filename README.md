@@ -4,7 +4,8 @@ A live map of your tailnet that answers one question: **who can actually reach w
 
 It reads your device list and your policy file from the Tailscale API and draws
 them as one picture — devices grouped by where they physically are, lines taken
-straight from your grants.
+straight from your grants. One instance can hold maps for **several tailnets**
+at once, switchable in-app from one URL — see [Multiple tailnets](#multiple-tailnets-one-url).
 
 ### ▶ [Try the live demo](https://crazyhoesl.github.io/tailnet-atlas/)
 
@@ -32,6 +33,9 @@ can regenerate it yourself, see [Demo](#demo).*
 * **Click to pin** and everything unrelated dims — the view worth having open
   while you are about to change a grant.
 * **The legend doubles as a role filter.**
+* **A switcher above the map** lets you flip between tailnets when more than
+  one is configured — the whole page (graph, tables, brand) swaps in place,
+  no reload.
 * Tables below the map for devices, grants, sites and owners, plus one that
   documents the placement rules. That table is generated from the same
   constants the placement code uses, so it cannot drift from the behaviour.
@@ -62,14 +66,16 @@ bridge. Rule order matters, which is why it is explicit in the config.
 
 ## Running it
 
-You need a Tailscale **OAuth client** (read-only is enough: `devices:core:read`
-and `policy_file:read`) and a **tagged** auth key for the node itself.
+You need a Tailscale **OAuth client** per tailnet you want to show (read-only
+is enough: `devices:core:read` and `policy_file:read`), and a **tagged** auth
+key for the one node the app itself runs as.
 
 ```bash
 git clone https://github.com/crazyhoesl/tailnet-atlas
 cd tailnet-atlas
-cp .env.example .env                  # OAuth client + auth key + node name
-cp config.example.toml config.toml    # your sites and networks
+cp .env.example .env                          # auth key, node name, OAuth client(s)
+cp tailnets.example.toml tailnets.toml        # which tailnets to show
+cp config.example.toml config-<slug>-tsnet.toml   # one per tailnet — your sites and networks
 docker compose up -d --build
 ```
 
@@ -77,28 +83,70 @@ Then open `https://<TS_HOSTNAME>.<your-tailnet>.ts.net`.
 
 The app binds `127.0.0.1` inside the Tailscale sidecar's network namespace and
 is reachable only through `tailscale serve`. Funnel is explicitly disabled in
-`serve.json`. It only ever reads from the API.
+`serve.json`. It only ever reads from the API — for every tailnet it shows,
+not just the one the sidecar joins (more on that below).
 
 ### Configuration
 
-Everything specific to your setup lives in `config.toml`; see
-[`config.example.toml`](config.example.toml), which is commented in full. In
-short: one `[[site]]` block per place, each with an address prefix that places a
-device there. Two site ids are reserved — `dock` takes whatever is left inside
-`172.16/12`, and `mobile` is the fallback for anything that matched nothing.
+Two files, at two different scopes:
+
+* **`tailnets.toml`** (copy from [`tailnets.example.toml`](tailnets.example.toml))
+  lists which tailnets to show. One `[[tailnet]]` block per map: a `slug`, the
+  path to its site config, and the names of the two env vars holding its
+  OAuth credentials. The first block is what `/` shows by default.
+* **One `config-<slug>-tsnet.toml` per tailnet** (copy from
+  [`config.example.toml`](config.example.toml), which is commented in full).
+  One `[[site]]` block per place, each with an address prefix that places a
+  device there. Two site ids are reserved — `dock` takes whatever is left
+  inside `172.16/12`, and `mobile` is the fallback for anything that matched
+  nothing.
 
 Positions (`fx`/`fy`) are only a starting hint. The layout pushes overlapping
 regions apart and keeps them inside the frame, and on narrow screens it stacks
 them in a single column, so you do not have to get them right.
 
+## Multiple tailnets, one URL
+
+One process, one Tailscale node, several maps. The trick is that the two
+things people usually bundle together are actually independent:
+
+* **Showing a tailnet's data** only needs its OAuth client — a plain HTTPS API
+  call to `api.tailscale.com`, reachable from anywhere. It does **not**
+  require the app to be a peer of that tailnet.
+* **Serving the page** needs exactly one Tailscale node, reachable via
+  `tailscale serve` from whichever tailnet you want the URL to live on.
+
+So `compose.yml` runs a single `ts-tailnet` sidecar (joined to your "home"
+tailnet) and a single `app` container namespaced to it — never one pair per
+tailnet. Every tailnet in `tailnets.toml` just adds two more env vars in
+`.env` (`oauth_id_env` / `oauth_secret_env`, named per-tailnet so their
+credentials can't collide in one process) and one more `config-*.toml`
+volume mount. The in-app switcher then just re-fetches `/api/state?net=<slug>`
+and swaps the graph and tables in place.
+
+Two things **not** to do if you add tailnets by hand:
+
+* Don't run a second `tailscale` sidecar pointed at the same
+  `./data/tailscale` directory to "add" a tailnet — two daemons sharing one
+  state directory become the *same* node and fight over its identity. Each
+  additional Tailscale **node** (as opposed to additional tailnet *data*)
+  needs its own state directory.
+* Don't reuse a bare env var name (`TS_OAUTH_CLIENT_ID`) across tailnets in
+  compose's `environment:` block — `${VAR}` interpolation there is resolved
+  once from the shell/root `.env`, the same value for every service, and
+  silently overrides whatever a per-service `env_file:` set. That's why the
+  credentials are named per-tailnet in `.env` instead.
+
 ### Refresh behaviour
 
-A background loop rebuilds every 5 minutes. While the page is open it also
-polls every 10 seconds for up to 5 minutes of *viewing* time — a backgrounded
-tab never polls. The server coalesces those requests behind a short TTL, so ten
-open tabs still mean one call upstream. What is served is always the last
-successfully built version; if the API goes down the page keeps working and
-grows a "stale" banner.
+Each tailnet has its own background loop, rebuilding every 5 minutes
+independently — one tailnet's API being down never stalls another's. While
+the page is open it also polls every 10 seconds, for the currently-selected
+tailnet, for up to 5 minutes of *viewing* time — a backgrounded tab never
+polls. The server coalesces those requests behind a short TTL per tailnet, so
+ten open tabs on the same map still mean one call upstream. What is served is
+always the last successfully built version; if a tailnet's API goes down that
+tailnet's page keeps working and grows a "stale" banner.
 
 ## Demo
 

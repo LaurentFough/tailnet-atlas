@@ -1,6 +1,12 @@
 # secrets and per-install config
 .env
+.env-*
 config.toml
+config-*-tsnet.toml
+tailnets.toml
+
+# scratch copies of source files a local iteration is based on
+_tmp/
 
 # tailscale node state
 data/

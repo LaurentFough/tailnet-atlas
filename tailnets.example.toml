@@ -1,0 +1,30 @@
+# Tailnet Atlas — which tailnets to show, and where each one's map lives.
+# Copy to tailnets.toml and edit. tailnets.toml is gitignored.
+#
+# One [[tailnet]] block per map the in-app switcher can show. The FIRST
+# block is what "/" renders by default. Adding a tailnet needs no image
+# rebuild — this file and every config it points at are mounted read-only.
+#
+# The app does NOT need to be a peer of a tailnet to show its map — it only
+# calls that tailnet's read-only OAuth API (devices:core:read,
+# policy_file:read), which works from anywhere on the internet. Only the
+# tailnet you actually serve the page FROM (see compose.yaml/serve.json)
+# needs a Tailscale node at all.
+#
+# oauth_id_env / oauth_secret_env name the environment variables that hold
+# that tailnet's OAuth client credentials (set them in .env). Naming them
+# per-tailnet, instead of every entry reusing TS_OAUTH_CLIENT_ID, is what
+# lets one process hold credentials for several orgs without one clobbering
+# another.
+
+[[tailnet]]
+slug             = "example-one"
+config           = "config.example.toml"
+oauth_id_env     = "TS_OAUTH_CLIENT_ID_EXAMPLE_ONE"
+oauth_secret_env = "TS_OAUTH_SECRET_EXAMPLE_ONE"
+
+# [[tailnet]]
+# slug             = "example-two"
+# config           = "config-example-two.toml"
+# oauth_id_env     = "TS_OAUTH_CLIENT_ID_EXAMPLE_TWO"
+# oauth_secret_env = "TS_OAUTH_SECRET_EXAMPLE_TWO"

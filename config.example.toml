@@ -20,14 +20,27 @@ pinned_roaming = ["cloud-exit"]
 #   dock    — receives whatever is left inside 172.16/12 (container bridges)
 #   mobile  — the fallback for anything that matched nothing
 #
-# `match` is a plain address prefix, not a CIDR. Only put PLACE-BOUND networks
-# here. A travel router hands out its own LAN and carries it everywhere, so
-# that network says nothing about where the device is — leave it out and let
-# the uplink decide (see README).
+# `match` is a plain address prefix, not a CIDR — EXCEPT when a value fully
+# parses as an address ("192.168.1.42"), in which case it pins that ONE host
+# exactly. A partial value ("192.168.1.", "10.0") stays prefix-matched.
+# This is automatic, not a flag: the two forms already look different, and
+# it matters — prefix-matching "192.168.1.4" would also wrongly claim
+# "192.168.1.40" or "192.168.1.245" if some other site pinned those exactly.
+# Only put PLACE-BOUND networks/hosts here. A travel router hands out its
+# own LAN and carries it everywhere, so that network says nothing about
+# where the device is — leave it out and let the uplink decide (see README).
+#
+# Both `net` (display only) and `match` (actually matched) take either a
+# single string or several — a TOML array, or one comma-separated string —
+# when one place spans more than one disjoint subnet or host. All of a
+# site's values still resolve to that one site id, so this never creates
+# ambiguity: a device matches exactly one value, same as with one. See the
+# "office" site below.
 #
 # fx/fy are a starting position in the frame (0..1). They are only a hint: the
 # layout pushes overlapping regions apart and keeps them inside the canvas, so
-# you do not have to get them exactly right.
+# you do not have to get them exactly right — that logic runs on the site's
+# device count, not on how many subnets fed into it.
 # tint is "r,g,b" and colours the region's halo, rim and caption.
 # ---------------------------------------------------------------------------
 
@@ -40,11 +53,13 @@ fx    = 0.19
 fy    = 0.28
 tint  = "255,209,102"
 
+# Two buildings on the same badge, wired as separate subnets — still one
+# site on the map. Either form works: an array, or "10.20.30., 10.20.31."
 [[site]]
 id    = "office"
 label = "Office"
-net   = "10.20.30.0/24"
-match = "10.20.30."
+net   = ["10.20.30.0/24", "10.20.31.0/24"]
+match = ["10.20.30.", "10.20.31."]
 fx    = 0.54
 fy    = 0.11
 tint  = "178,139,250"
