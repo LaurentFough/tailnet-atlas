@@ -17,13 +17,16 @@ services:
   ts-tailnet:
     image: tailscale/tailscale:latest
     container_name: tailnet-tailscale
-    hostname: ${TS_HOSTNAME:-tailnet-atlas}
+    hostname: ${TS_HOSTNAME:?set TS_HOSTNAME in .env}
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY:-}
-      TS_HOSTNAME: ${TS_HOSTNAME:-tailnet-atlas}
+      TS_HOSTNAME: ${TS_HOSTNAME:?set TS_HOSTNAME in .env}
       TS_STATE_DIR: /var/lib/tailscale
       TS_SERVE_CONFIG: /config/serve.json
       TS_USERSPACE: "false"
+      # log in only if the persisted state isn't already logged in, so a
+      # restart or rebuild reuses this node instead of registering a new one
+      TS_AUTH_ONCE: "true"
     volumes:
       - ./data/tailscale:/var/lib/tailscale
       - ./serve.json:/config/serve.json:ro

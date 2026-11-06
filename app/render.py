@@ -290,7 +290,10 @@ class Tailnet:
             r.raise_for_status()
             return r.json().get("users") or []
         except Exception as e:
-            log.warning("[%s] users not available: %s", self.slug, e)
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            hint = (" — Owners table is derived from the device list; the OAuth client "
+                    "may need the `users:read` scope" if code in (401, 403, 404) else "")
+            log.warning("[%s] users not available: %s%s", self.slug, e, hint)
             return []
 
     # ----------------------------------------------------------- devices
@@ -504,7 +507,14 @@ class Tailnet:
         for d in devs:
             d["ownerKind"] = ("tag" if d["owner"] == TAG_OWNED else
                               ("self" if d["owner"] == primary else "other"))
-        order = [u for u in api] + [TAG_OWNED]
+        # Owners the users API didn't return (it failed, or the OAuth client
+        # lacks `users:read`) still own devices; derive them from the device
+        # list so their devices don't vanish from the table. They just have no
+        # displayName/role/status beyond the login.
+        known = set(api) | {TAG_OWNED}
+        order = (list(api)
+                 + sorted({d["owner"] for d in devs if d["owner"] and d["owner"] not in known})
+                 + [TAG_OWNED])
         out = []
         for login in order:
             mine = [d for d in devs if d["owner"] == login]

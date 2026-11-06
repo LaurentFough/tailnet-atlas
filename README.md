@@ -77,6 +77,7 @@ cp .env.example .env                          # auth key, node name, OAuth clien
 cp tailnets.example.toml tailnets.toml        # which tailnets to show
 cp config.example.toml config-<slug>-tsnet.toml   # one per tailnet — your sites and networks
 cp compose.example.yml compose.yml            # then add a volume mount per config-<slug>-tsnet.toml
+python3 scripts/preflight.py                  # warns if the node name is already taken (see below)
 docker compose up -d --build
 ```
 
@@ -137,6 +138,22 @@ Two things **not** to do if you add tailnets by hand:
   once from the shell/root `.env`, the same value for every service, and
   silently overrides whatever a per-service `env_file:` set. That's why the
   credentials are named per-tailnet in `.env` instead.
+
+### Node name and leftover nodes
+
+The sidecar's name comes from `TS_HOSTNAME` in `.env` (required — there is no
+default). Its identity is kept in `data/tailscale`, and `TS_AUTH_ONCE` makes a
+restart or rebuild reuse it rather than log in again. Keep that directory, and
+don't `docker compose down` + delete it casually: a node with no state registers
+as a brand-new device.
+
+If a node with that name is already in your tailnet — a lost state directory, a
+container removed without logging out — Tailscale renames the new one
+`<name>-1`, `<name>-2`, … and issues the cert for *that* name, so the URL you
+use leads to the stale node. `scripts/preflight.py` lists the clashing nodes
+before you start; `--delete` removes the offline ones (it asks first, never
+touches online nodes, and needs the `devices:core` write scope on that
+tailnet's OAuth client). `--strict` makes it fail a `&&` chain instead.
 
 ### Refresh behaviour
 
