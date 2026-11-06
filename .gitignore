@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Editors
+.history/
+
 # Docker
 compose.yml
 
@@ -24,3 +27,5 @@ demo/package-lock.json
 
 __pycache__/
 *.pyc
+
+/net-commander

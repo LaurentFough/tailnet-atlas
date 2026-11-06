@@ -64,6 +64,11 @@ pinned_roaming = ["cloud-exit"]
 # neither is just a name for nothing. `match` still works in auto mode and is
 # tried first.
 #
+# `country = "PT"` (ISO 3166-1 alpha-2) puts that flag beside the site. Without
+# it the flag is voted from the countries of its devices' public addresses, which
+# needs the optional GeoIP file (python3 scripts/fetch-geoip.py). Docker and
+# roaming sites get a whale and a phone instead of a flag.
+#
 # fx/fy are a starting position in the frame (0..1). They are only a hint: the
 # layout pushes overlapping regions apart and keeps them inside the canvas, so
 # you do not have to get them exactly right — that logic runs on the site's

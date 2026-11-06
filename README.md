@@ -7,7 +7,7 @@ them as one picture — devices grouped by where they physically are, lines take
 straight from your grants. One instance can hold maps for **several tailnets**
 at once, switchable in-app from one URL — see [Multiple tailnets](#multiple-tailnets-one-url).
 
-### ▶ [Try the live demo](https://crazyhoesl.github.io/tailnet-atlas/)
+### ▶ [Try the live demo](https://laurentfough.github.io/tailnet-atlas/)
 
 Hover the nodes, click one to pin it, click a role in the legend to filter.
 
@@ -71,7 +71,7 @@ is enough: `devices:core:read` and `policy_file:read`), and a **tagged** auth
 key for the one node the app itself runs as.
 
 ```bash
-git clone https://github.com/crazyhoesl/tailnet-atlas
+git clone https://github.com/LaurentFough/tailnet-atlas
 cd tailnet-atlas
 cp .env.example .env                          # auth key, node name, OAuth client(s)
 cp tailnets.example.toml tailnets.toml        # which tailnets to show
@@ -146,6 +146,35 @@ Known limits, because the public address is a heuristic:
 
 See `config.example.toml` for the settings. The default is still `manual`.
 
+## Country flags
+
+Each site shows a flag beside its name — on the map, in the Sites table and in a
+node's tooltip. Docker gets 🐳 and the roaming site 📱, since neither is in a
+country; a site whose addresses can't be placed gets 🌐.
+
+The country comes from your devices' **public** addresses, looked up in a local
+copy of the free [DB-IP Lite](https://db-ip.com/db/download/ip-to-country-lite)
+country database. Nothing is sent anywhere: you download the file, the app reads
+it. A site takes the country most of its devices resolve to.
+
+```bash
+python3 scripts/fetch-geoip.py     # -> data/geo/dbip-country-lite.csv.gz (~5 MB)
+docker compose up -d               # compose mounts ./data/geo into the app
+```
+
+DB-IP publishes monthly. Re-run the script (cron is fine) and the app picks up the
+new file without a restart. Without the file the feature is simply off: no flags
+except Docker/roaming, and no error. The page credits DB-IP wherever the data is used
+(CC BY 4.0).
+
+To force or supply a flag — say, for a site that has no public address on record —
+add `country = "PT"` to its `[[site]]` block.
+
+It is country-level and a best guess: anycast and CDN addresses (Google's `8.8.8.8`
+resolves to the US, one of its IPv6 DNS addresses to Canada), VPNs and mobile
+carriers can land in the wrong country. Flags are emoji, so Windows shows two
+letters (`PT`) instead of a flag.
+
 ## Multiple tailnets, one URL
 
 One process, one Tailscale node, several maps. The trick is that the two
@@ -217,7 +246,7 @@ open demo/out/atlas-demo.html
 
 `demo/out/atlas-demo.html` is a single self-contained file you can open from
 disk. The same build is written to `docs/index.html`, which is what GitHub
-Pages serves as the [live demo](https://crazyhoesl.github.io/tailnet-atlas/) —
+Pages serves as the [live demo](https://laurentfough.github.io/tailnet-atlas/) —
 so regenerating and committing keeps the hosted page in step.
 
 To re-record the GIF:

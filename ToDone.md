@@ -35,3 +35,31 @@ response body, and the call is skipped for 24 h (`USERS_RETRY_AFTER` in
 4. **No-key case.** The "self" ownership ring needs the users API (it is the owner
    flagged by role). Derive it another way if running without a key is worth
    supporting.
+
+## Auto sites and flags — known gaps (branch `feature/auto-sites`)
+
+Done: sites derived from public addresses (`site_mode = "auto"`), layout that holds up
+to dozens of sites, country flags from the DB-IP Lite file, 🐳/📱/🌐 for sites without
+a country. Left for later:
+
+1. **ASN-based roaming detection.** Today roaming is decided by hotspot ranges, device
+   OS and cluster size only. Looking up each public address's network (ASN, e.g. from
+   iptoasn.com's free file, downloaded and read locally like the flags) would let known
+   mobile carriers mark a device as roaming, and let sites be labelled by ISP. Mobile
+   and fixed service often share one ASN, so it can only be a hint, with a short editable
+   list of known mobile ASNs.
+2. **Churn-based roaming.** A device whose public address keeps changing is roaming. Needs a
+   small state file in `data/`; the app has no persistence today.
+3. **Tag hints for location.** An opt-in convention such as `tag:site-lisbon` to name or
+   pin a site for devices whose public address cannot place them.
+4. **Dense maps.** With ~25+ sites a few captions still touch their neighbours (the busiest
+   spots in the stress test). `demo/geotest.js` only measures nodes and circles; it does
+   not check captions.
+5. **Flags unverified by eye.** Emoji flags were checked in the page data, not on screen
+   (the test browser had no emoji font). Check one caption on a real machine. Windows shows
+   two letters (`PT`) instead of a flag; bundled SVG flags would fix that at the cost of
+   page weight.
+6. **Housekeeping on the hosted demo.** README and demo banner now point at
+   `LaurentFough/tailnet-atlas`; `laurentfough.github.io/tailnet-atlas` only works once
+   GitHub Pages is enabled for that repo (source: `docs/` on `main`). `LICENSE` still names
+   `crazyhoesl` as the copyright holder — authorship, left for the owner to decide.

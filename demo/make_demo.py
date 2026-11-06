@@ -34,7 +34,7 @@ os.environ.setdefault("TEMPLATE_PATH", str(ROOT / "app" / "template.html"))
 import render  # noqa: E402
 
 OUT = pathlib.Path(__file__).resolve().parent / "out"
-REPO = "https://github.com/crazyhoesl/tailnet-atlas"
+REPO = "https://github.com/LaurentFough/tailnet-atlas"
 
 BANNER = (
     '\n      <p class="lede" style="margin-top:10px;padding:9px 12px;'
@@ -43,7 +43,7 @@ BANNER = (
     '<b>This is a demo.</b> Every device, user, site and network below is '
     'invented — but it is rendered by the real code, not mocked up. '
     f'Source and setup: <a href="{REPO}" '
-    'style="color:var(--accent)">github.com/crazyhoesl/tailnet-atlas</a></p>'
+    'style="color:var(--accent)">github.com/LaurentFough/tailnet-atlas</a></p>'
 )
 
 OWNER, MATE, COLLEAGUE = "nadia@github", "theo@github", "mila@github"

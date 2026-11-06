@@ -8,6 +8,7 @@ pinned_roaming = ["cloud-exit"]
 
 [[site]]
 id    = "lisbon"
+country = "PT"
 label = "Lisbon · home"
 net   = "192.168.10.0/24"
 match = "192.168.10."
@@ -17,6 +18,7 @@ tint  = "255,209,102"
 
 [[site]]
 id    = "berlin"
+country = "DE"
 label = "Berlin · office"
 net   = "10.20.30.0/24"
 match = "10.20.30."

@@ -61,6 +61,8 @@ services:
     volumes:
       # mounted, not baked in: editing sites should not need an image rebuild
       - ./tailnets.toml:/app/tailnets.toml:ro
+      # optional country flags: python3 scripts/fetch-geoip.py fills this (see README)
+      - ./data/geo:/app/geo:ro
       # one mount per [[tailnet]] in tailnets.toml; `config` there must match
       - ./config-example-one-tsnet.toml:/app/config-example-one-tsnet.toml:ro
     restart: unless-stopped

@@ -34,6 +34,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+import geo
+
 log = logging.getLogger("render")
 
 API = "https://api.tailscale.com/api/v2"
@@ -340,6 +342,17 @@ class Tailnet:
         self.auto = str(self.cfg.get("site_mode", "manual")).lower() == "auto"
         self.min_site_devices = max(1, int(self.cfg.get("min_site_devices", 2)))
         self.hotspot_prefixes = tuple(multi(self.cfg.get("hotspot_nets"))) or HOTSPOT_PREFIXES
+        # `country = "PT"` on a [[site]] overrides the flag that would be voted
+        # from its devices' public addresses (or supplies one when there is no
+        # GeoIP file). ISO 3166-1 alpha-2.
+        self.site_country: dict[str, str] = {}
+        for st in self.cfg["site"]:
+            if st.get("country"):
+                cc = str(st["country"]).strip().upper()
+                if not re.fullmatch(r"[A-Z]{2}", cc):
+                    raise SystemExit(f"[{self.slug}] site '{st['id']}': country = "
+                                     f"{st['country']!r} is not a 2-letter ISO code")
+                self.site_country[st["id"]] = cc
         # `public = [...]` on a [[site]] pins whichever cluster sits behind
         # that address (or CIDR) to that site, whatever its size or members.
         self.public_pins: list[tuple] = []
@@ -497,9 +510,12 @@ class Tailnet:
                 # shared out to someone else, so that can't be shown here.
                 "sharedIn": bool(d.get("isExternal")),
             })
+            pubs = self.public_addrs(d)
+            # first public address the GeoIP file knows; "" when none does
+            out[-1]["cc"] = next((c for c in map(geo.country, pubs) if c), "")
             if self.auto:
                 out[-1]["_pool"] = self.private_v4(d)
-                out[-1]["_pubs"] = self.public_addrs(d)
+                out[-1]["_pubs"] = pubs
         if self.auto:
             self.assign_sites(out)
             for d in out:
@@ -648,10 +664,33 @@ class Tailnet:
                 continue
             m = metas[sid]
             fr = min(0.28, max(0.085, 0.075 + 0.024 * n))
+            cc, icon = self.site_flag(sid, [d for d in devs if d["site"] == sid])
             sites.append({"id": sid, "label": m["label"], "net": m["net"],
                           "fx": m["fx"], "fy": m["fy"], "fr": round(fr, 3),
-                          "tint": m["tint"], "count": n})
+                          "tint": m["tint"], "count": n, "cc": cc, "flag": icon})
         return sites
+
+    def site_flag(self, sid: str, members: list[dict]) -> tuple[str, str]:
+        """-> (ISO country code or "", the icon to show beside the site).
+
+        Docker and roaming have no country, so they get their own icons — a
+        whale and a phone. Any other site takes the country most of its devices'
+        public addresses resolve to (a `country =` in the config wins). A site
+        whose addresses the GeoIP file does not know gets a globe, but only when
+        a file IS loaded: with none, no flags are shown at all rather than a row
+        of globes.
+        """
+        if sid == "dock":
+            return "", "\U0001F433"                 # whale
+        if sid == "mobile":
+            return "", "\U0001F4F1"                 # mobile phone
+        cc = self.site_country.get(sid, "")
+        if not cc:
+            votes = Counter(d["cc"] for d in members if d.get("cc"))
+            cc = votes.most_common(1)[0][0] if votes else ""
+        if cc:
+            return cc, geo.flag(cc)
+        return "", "\U0001F310" if geo.available() else ""   # globe
 
     # ----------------------------------------------------------- edges
     def build_edges(self, acl: dict, devs: list[dict]) -> tuple[list[dict], list[int]]:
@@ -933,7 +972,8 @@ class Tailnet:
             members = [d for d in devs if d["site"] == s["id"]]
             roles = sorted({d["role"] for d in members})
             rows.append(
-                f'<tr><td class="name">{html.escape(s["label"])}</td>'
+                f'<tr><td class="name">{(s["flag"] + " ") if s["flag"] else ""}'
+                f'{html.escape(s["label"])}</td>'
                 f'<td class="ip">{html.escape(s["net"])}</td>'
                 f'<td class="ip">{len(members)}</td>'
                 f'<td><div class="chips">'
@@ -1007,7 +1047,8 @@ class Tailnet:
                 .replace("__SITE_ROWS__", data["rows"]["sites"])
                 .replace("__USER_ROWS__", data["rows"]["users"])
                 .replace("__RULE_ROWS__", data["rows"]["rules"])
-                .replace("__RULE_NOTE__", self.RULE_NOTE)
+                .replace("__RULE_NOTE__", self.RULE_NOTE + (
+                    f" Country flags: {geo.CREDIT}." if geo.available() else ""))
                 .replace("__N_DEVICES__", str(data["kpi"]["devices"]))
                 .replace("__N_ONLINE__", str(data["kpi"]["online"]))
                 .replace("__N_GRANTS__", str(data["kpi"]["grants"]))

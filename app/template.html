@@ -496,7 +496,8 @@
         (n.online ? '' : ' <span class="off">offline</span>') +
         (n.sharedIn ? ' <span class="chip shared-in">shared in</span>' : '') +
         (n.exposed ? ' <span class="chip exposed">exposed</span>' : '') + '</h4>' +
-      row('site', n.siteLabel) + row('tailscale', n.ip) +
+      row('site', ((siteOf[n.site] && siteOf[n.site].flag) ? siteOf[n.site].flag + ' ' : '') +
+          n.siteLabel) + row('tailscale', n.ip) +
       // routers serve their own LANs; what places them is the uplink they got
       row(n.lanKind === 'uplink' ? 'uplink' : 'local', n.lan) +
       row('os', n.os) +
@@ -564,7 +565,7 @@
     // the side — both happen constantly on a phone-width canvas.
     ctx.textAlign = 'center';
     ctx.font = '600 10.5px ' + cssv('--mono');
-    var cap = s.label.toUpperCase();
+    var cap = s.label.toUpperCase(), fl = s.flag ? s.flag + ' ' : '';
     // With many sites the captions of neighbours collide. Fit the name to the
     // width of its own circle, and give the second line only to the site
     // being looked at; the full text is always in the Sites table below.
@@ -572,9 +573,11 @@
     var showNet = !many || (fid && byId[fid] && byId[fid].site === s.id);
     if (many) {
       var maxW = Math.max(2 * R * 1.25, 70);
-      while (cap.length > 4 && ctx.measureText(cap).width > maxW) cap = cap.slice(0, -2);
+      // trim the NAME only: the flag is a surrogate pair and must stay whole
+      while (cap.length > 3 && ctx.measureText(fl + cap).width > maxW) cap = cap.slice(0, -1);
       if (cap.length < s.label.length) cap = cap.replace(/\s+$/, '') + '…';
     }
+    cap = fl + cap;
     var lx = clampText(x, Math.max(ctx.measureText(cap).width, many ? 0 : 78));
     var above = y - R - 34 > 4;
     ctx.fillStyle = 'rgba(' + tint + ',.85)';
