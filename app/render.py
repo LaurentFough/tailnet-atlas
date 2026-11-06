@@ -211,10 +211,15 @@ class Tailnet:
     cid: str
     secret: str
     cfg: dict = field(repr=False)
+    # Optional user-level API key, used ONLY for the users list: that endpoint
+    # answers 404 to OAuth tokens whatever their scopes, and answers to an API
+    # key. An API key acts as the user who made it (it cannot be scoped down),
+    # so it is opt-in and everything else keeps using the OAuth client.
+    api_key: str = field(default="", repr=False)
 
     @classmethod
     def load(cls, slug: str, config_path: str, oauth_id_env: str,
-              oauth_secret_env: str) -> "Tailnet":
+              oauth_secret_env: str, api_key_env: str = "") -> "Tailnet":
         cid = os.environ.get(oauth_id_env, "")
         secret = os.environ.get(oauth_secret_env, "")
         if not cid or not secret:
@@ -235,7 +240,11 @@ class Tailnet:
             raise SystemExit(f"{config_path}: missing required site id(s): {missing}")
         if len(set(ids)) != len(ids):
             raise SystemExit(f"{config_path}: duplicate site ids")
-        return cls(slug=slug, cid=cid, secret=secret, cfg=cfg)
+        api_key = os.environ.get(api_key_env, "") if api_key_env else ""
+        if api_key_env and not api_key:
+            log.warning("[%s] %s is named in tailnets.toml but not set — the Owners "
+                        "table will be derived from the device list", slug, api_key_env)
+        return cls(slug=slug, cid=cid, secret=secret, cfg=cfg, api_key=api_key)
 
     def __post_init__(self):
         self.tailnet_label = self.cfg.get("tailnet", self.slug)
@@ -302,8 +311,11 @@ class Tailnet:
                       (self._users_retry_at - now) // 60)
             return []
         try:
+            # An API key if one is configured (the only credential this endpoint
+            # accepts, as far as we have been able to tell), else the OAuth token.
+            bearer = self.api_key or self._token()
             r = httpx.get(f"{API}/tailnet/-/users",
-                          headers={"Authorization": f"Bearer {self._token()}"}, timeout=30)
+                          headers={"Authorization": f"Bearer {bearer}"}, timeout=30)
             r.raise_for_status()
             self._users_retry_at = 0.0
             return r.json().get("users") or []
@@ -319,11 +331,13 @@ class Tailnet:
             extra = f" — response: {body}" if body else ""
             if code == 404:
                 self._users_retry_at = now + USERS_RETRY_AFTER
-                extra += (f" — endpoint not found for this tailnet; Owners table is derived "
-                          f"from the device list, not asking again for "
-                          f"{USERS_RETRY_AFTER // 3600}h")
-            elif code in (401, 403):
-                extra += " — the OAuth client may need the `users:read` scope"
+                extra += (" — endpoint not found for this credential" +
+                          ("" if self.api_key else
+                           " (OAuth tokens get 404 here; set api_key_env in tailnets.toml)") +
+                          f"; Owners table is derived from the device list, "
+                          f"not asking again for {USERS_RETRY_AFTER // 3600}h")
+            elif code in (401, 403) and self.api_key:
+                extra += " — API key rejected: expired or revoked? (keys expire after at most 90 days)"
             log.warning("[%s] users not available: %s%s", self.slug, e, extra)
             return []
 
@@ -752,7 +766,8 @@ def load_registry(manifest_path: str = MANIFEST) -> dict[str, Tailnet]:
         config_path = e["config"]
         if not os.path.isabs(config_path):
             config_path = os.path.join(base_dir, config_path)
-        reg[slug] = Tailnet.load(slug, config_path, e["oauth_id_env"], e["oauth_secret_env"])
+        reg[slug] = Tailnet.load(slug, config_path, e["oauth_id_env"], e["oauth_secret_env"],
+                                e.get("api_key_env", ""))
     return reg
 
 

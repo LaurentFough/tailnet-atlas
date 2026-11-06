@@ -22,6 +22,12 @@ slug             = "example-one"
 config           = "config-example-one-tsnet.toml"
 oauth_id_env     = "TS_OAUTH_CLIENT_ID_EXAMPLE_ONE"
 oauth_secret_env = "TS_OAUTH_SECRET_EXAMPLE_ONE"
+# Optional. Names an env var holding a user API key (tskey-api-…), used ONLY to
+# list users, which fills in owners' display names, roles and the "self" ring.
+# That endpoint returns 404 to OAuth tokens, so without this the Owners table is
+# derived from the device list. An API key acts as the user who created it and
+# can't be scoped read-only, and it expires (90 days max): see .env.example.
+# api_key_env    = "TS_API_KEY_EXAMPLE_ONE"
 
 # [[tailnet]]
 # slug             = "example-two"

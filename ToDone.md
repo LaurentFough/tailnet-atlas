@@ -2,7 +2,7 @@
 
 Things we know about and have deliberately left for later.
 
-## Tailscale users API returns 404 — fix later
+## Users list needs an API key, not an OAuth token — workaround in place
 
 **Symptom.** Every refresh logged, for every configured tailnet:
 
@@ -11,43 +11,34 @@ WARNING render: [<slug>] users not available: Client error '404 Not Found'
   for url 'https://api.tailscale.com/api/v2/tailnet/-/users'
 ```
 
-**Impact.** Small. `Tailnet.fetch_users()` catches it, and `build_users()` derives
-the Owners table from the device list instead. What is lost:
+**Cause (found by hand with `curl`).** `GET /api/v2/tailnet/<id or ->/users` answers
+`404 {"message":"not found"}` to an **OAuth token, whatever its scopes** (adding
+`users:read` changed nothing), on both tailnets and with the real tailnet ID. The
+same call with a user **API key** (`tskey-api-…`) returns the users. Devices and the
+policy file work fine with OAuth. Why Tailscale does this is unknown; we found no
+announcement that the endpoint changed.
 
-- each owner's display name, role and status (only the login is shown),
-- the "self" ownership ring on the map: it is the owner *flagged by role in the
-  API response*, so without it every user-owned device counts as "other".
+**What the code does now.**
 
-Devices, grants and the map itself are unaffected.
+- Optional `api_key_env` per tailnet in `tailnets.toml` names an env var holding an
+  API key. If set, it is used for the users call **only**; everything else still uses
+  the read-only OAuth client. See `tailnets.example.toml` and `.env.example`.
+- Without a key, the Owners table is derived from the device list. Lost: display
+  names, roles, and the "self" ownership ring on the map (it is the owner flagged by
+  role in the API response).
+- After a 404, the call is skipped for 24 h (`USERS_RETRY_AFTER` in `app/render.py`),
+  then tried once more. Every real attempt still logs a warning with Tailscale's
+  response body. Other failures are retried on the next refresh.
 
-**What we established** (checked by hand with `curl` and the same OAuth token that
-works for devices and the policy file):
+**Still to do.**
 
-- Both tailnets return 404, so it is not one client's scopes.
-- `GET /api/v2/tailnet/-/users` → `404 {"message":"not found"}` — an
-  application-level answer from a route that exists.
-- A path with no `tailnet/` segment → `404 {"message":"404 page not found"}` — the
-  router's generic reply. That one was a malformed path, so it proves nothing.
-- `GET /api/v2/tailnet/<real-tailnet-id>/users` (correct path, real ID) → the same
-  `404 {"message":"not found"}`, **after** the `users:read` scope was added to the
-  client. So neither the scope, the `-` shorthand nor the path is the cause.
-- Not yet tried: a user-scoped API key (`tskey-api-…`) instead of an OAuth token;
-  a brand-new token minted *after* the scope change (an old `$TOKEN` keeps its old
-  scopes); a control call to a sibling endpoint (e.g. `/tailnet/-/keys`,
-  `/tailnet/-/user-invites`) to see whether the whole users family 404s.
-- Searching found no announcement that the endpoint was removed or changed.
-
-**Ideas for the real fix.**
-
-1. Find the current endpoint / required scope in Tailscale's API reference, or
-   whether it needs an API key or a particular plan.
-2. If it is gone for good, drop the call and derive display names some other way
-   (e.g. from the devices' `user` field), and decide how to mark the "self" owner.
-3. Update the README / `.env.example` scope list to match whatever turns out to be
-   required.
-
-**What the code does meanwhile.** After a 404 the app stops asking for 24 hours
-(`USERS_RETRY_AFTER` in `app/render.py`) and then tries once more. The warning is
-still logged on every real attempt, now including Tailscale's response body. Other
-failures (timeouts, 5xx, auth) are retried on the next refresh. A success clears the
-backoff.
+1. **Choose the key's owner carefully.** An API key acts as the user who created it
+   and cannot be limited to read-only. Create it under the least-privileged account
+   that can list users (check which role that is), not a full admin if avoidable.
+2. **Keys expire** (90 days at most). When one does, the log says "API key rejected:
+   expired or revoked?" and the page falls back as above. Put a reminder in your
+   calendar, or consider a nicer way to surface it on the page.
+3. **Look for an OAuth-friendly route.** If Tailscale starts accepting OAuth for this
+   endpoint, or offers another way to read user roles, drop the API key.
+4. **Fix the "self" ring without the users API**, e.g. derive the primary owner some
+   other way, if running without a key is a case worth supporting.
