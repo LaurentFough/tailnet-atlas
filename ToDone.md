@@ -2,43 +2,36 @@
 
 Things we know about and have deliberately left for later.
 
-## Users list needs an API key, not an OAuth token — workaround in place
+## Users list: fixed with an API key — follow-ups remain
 
-**Symptom.** Every refresh logged, for every configured tailnet:
-
-```
-WARNING render: [<slug>] users not available: Client error '404 Not Found'
-  for url 'https://api.tailscale.com/api/v2/tailnet/-/users'
-```
-
-**Cause (found by hand with `curl`).** `GET /api/v2/tailnet/<id or ->/users` answers
+**Resolved.** The users endpoint (`GET /api/v2/tailnet/-/users`) answers
 `404 {"message":"not found"}` to an **OAuth token, whatever its scopes** (adding
-`users:read` changed nothing), on both tailnets and with the real tailnet ID. The
-same call with a user **API key** (`tskey-api-…`) returns the users. Devices and the
-policy file work fine with OAuth. Why Tailscale does this is unknown; we found no
-announcement that the endpoint changed.
+`users:read` changed nothing; both tailnets, with `-` and with the real tailnet ID).
+The same call with a user **API key** (`tskey-api-…`) returns the users. Why
+Tailscale does this is unknown; we found no announcement that the endpoint changed.
 
-**What the code does now.**
+An optional per-tailnet `api_key_env` in `tailnets.toml` now names an env var holding
+an API key, used for the users call **only** — devices and the policy file still use
+the read-only OAuth client. See `tailnets.example.toml` and `.env.example`. After
+adding it, the app image must be **rebuilt** (`docker compose up -d --build app`);
+`render.py` is baked into the image, and a plain `restart` does not re-read `.env`.
+Confirmed working after the rebuild: no `users not available` warning in the logs.
 
-- Optional `api_key_env` per tailnet in `tailnets.toml` names an env var holding an
-  API key. If set, it is used for the users call **only**; everything else still uses
-  the read-only OAuth client. See `tailnets.example.toml` and `.env.example`.
-- Without a key, the Owners table is derived from the device list. Lost: display
-  names, roles, and the "self" ownership ring on the map (it is the owner flagged by
-  role in the API response).
-- After a 404, the call is skipped for 24 h (`USERS_RETRY_AFTER` in `app/render.py`),
-  then tried once more. Every real attempt still logs a warning with Tailscale's
-  response body. Other failures are retried on the next refresh.
+Without a key the page still works: the Owners table is derived from the device list
+(no display names, roles, or "self" ring), the 404 is logged with Tailscale's
+response body, and the call is skipped for 24 h (`USERS_RETRY_AFTER` in
+`app/render.py`) before one more try.
 
 **Still to do.**
 
-1. **Choose the key's owner carefully.** An API key acts as the user who created it
-   and cannot be limited to read-only. Create it under the least-privileged account
-   that can list users (check which role that is), not a full admin if avoidable.
-2. **Keys expire** (90 days at most). When one does, the log says "API key rejected:
-   expired or revoked?" and the page falls back as above. Put a reminder in your
-   calendar, or consider a nicer way to surface it on the page.
-3. **Look for an OAuth-friendly route.** If Tailscale starts accepting OAuth for this
-   endpoint, or offers another way to read user roles, drop the API key.
-4. **Fix the "self" ring without the users API**, e.g. derive the primary owner some
-   other way, if running without a key is a case worth supporting.
+1. **Least-privilege key owner.** An API key acts as the user who created it and cannot
+   be limited to read-only. Check which role is enough to list users and create the
+   keys under that account rather than a full admin.
+2. **Expiry.** Keys last 90 days at most. When one expires the log says "API key
+   rejected: expired or revoked?" and the page falls back as above. Set a calendar
+   reminder, or surface it on the page.
+3. **OAuth later.** If Tailscale starts accepting OAuth for this endpoint, drop the
+   API keys.
+4. **No-key case.** The "self" ownership ring needs the users API (it is the owner
+   flagged by role). Derive it another way if running without a key is worth
+   supporting.
