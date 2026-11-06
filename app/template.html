@@ -80,6 +80,8 @@
   .tip .r{display:flex;justify-content:space-between;gap:16px;color:var(--muted);
     font-family:var(--mono);font-size:11px;padding:1.5px 0}
   .tip .r b{color:var(--ink);font-weight:500}
+  .tip .r.rule{padding-left:9px;opacity:.85}
+  .tip .r.rule span{color:var(--accent)}
   .tip .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
 
   section{margin-top:40px}
@@ -110,6 +112,10 @@
   .chip.client{background:color-mix(in srgb,var(--h-client) 22%,transparent);color:var(--h-client)}
   .chip.home{background:color-mix(in srgb,var(--h-home) 20%,transparent);color:var(--h-home)}
   .chip.proxy,.chip.ha-access{background:color-mix(in srgb,var(--h-proxy) 20%,transparent);color:var(--h-proxy)}
+  .chip.exposed{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent);
+    font-weight:600}
+  .chip.shared-in{background:color-mix(in srgb,var(--warm) 20%,transparent);color:var(--warm);
+    font-weight:600}
   .port{font:11px var(--mono);padding:2px 7px;border-radius:6px;
     background:rgba(109,141,255,.16);color:var(--accent-2)}
   .port.all{background:rgba(246,178,60,.16);color:var(--warm)}
@@ -166,6 +172,8 @@
       <div class="kpi"><b id="k-grants">__N_GRANTS__</b><span>grants</span></div>
       <div class="kpi"><b id="k-sites">__N_SITES__</b><span>sites</span></div>
       <div class="kpi"><b id="k-users">__N_USERS__</b><span>owners</span></div>
+      <div class="kpi"><b id="k-exposed">__N_EXPOSED__</b><span>exposed</span></div>
+      <div class="kpi"><b id="k-sharedin">__N_SHAREDIN__</b><span>shared in</span></div>
     </div>
   </div>
 
@@ -260,6 +268,7 @@
                net: cssv('--h-subnet') };
     C.ink = cssv('--ink'); C.muted = cssv('--muted'); C.faint = cssv('--faint');
     C.line = cssv('--line-2'); C.surf = cssv('--surface-2'); C.accent = cssv('--accent');
+    C.warm = cssv('--warm');
   }
   readColors();
 
@@ -425,10 +434,31 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
   }
   function row(k, v) { return '<div class="r"><span>' + k + '</span><b>' + esc(v) + '</b></div>'; }
+  // Who can actually reach this device: the grant, not a peer count. An
+  // "exposed" device's whole point is that the source of a rule matters
+  // more than how many devices happen to sit on the other end of it.
+  function ruleLabel(a) {
+    var srcs = (a.src || []).map(function (s) {
+      return s.indexOf('tag:') === 0 ? s.slice(4) : s;
+    }).join(', ') || '?';
+    var ip = a.ip || [];
+    var ports = (ip.length === 1 && ip[0] === '*') ? 'any' : ip.join(',');
+    return srcs + (ports ? ' → ' + ports : '');
+  }
+  function accessBlock(n) {
+    var rules = n.access || [];
+    if (!rules.length) return row('reached by', 0);
+    var shown = rules.slice(0, 4).map(function (a) {
+      return '<div class="r rule"><span>' + esc(ruleLabel(a)) + '</span></div>';
+    }).join('');
+    var more = rules.length > 4
+      ? '<div class="r rule"><span>+' + (rules.length - 4) + ' more rule(s)</span></div>' : '';
+    return row('reached by', rules.length + ' rule' + (rules.length === 1 ? '' : 's')) + shown + more;
+  }
   function showTip(n, mx, my) {
     if (!n) { tip.classList.remove('on'); return; }
-    var out = 0, inc = 0;
-    EDGES.forEach(function (e) { if (e.a === n.id) out++; else if (e.b === n.id) inc++; });
+    var out = 0;
+    EDGES.forEach(function (e) { if (e.a === n.id) out++; });
     var tags = (n.tags || []).map(function (t) {
       var k = t.replace('tag:', '');
       return '<span class="chip ' + (k === 'client-full' ? 'full' : k) + '">' + k + '</span>';
@@ -436,14 +466,18 @@
     tip.innerHTML =
       '<h4><span style="width:9px;height:9px;border-radius:50%;background:' +
         (C.role[n.role] || C.muted) + ';display:inline-block"></span>' + esc(n.name) +
-        (n.online ? '' : ' <span class="off">offline</span>') + '</h4>' +
+        (n.online ? '' : ' <span class="off">offline</span>') +
+        (n.sharedIn ? ' <span class="chip shared-in">shared in</span>' : '') +
+        (n.exposed ? ' <span class="chip exposed">exposed</span>' : '') + '</h4>' +
       row('site', n.siteLabel) + row('tailscale', n.ip) +
       // routers serve their own LANs; what places them is the uplink they got
       row(n.lanKind === 'uplink' ? 'uplink' : 'local', n.lan) +
       row('os', n.os) +
-      row('owner', n.ownerKind === 'tag' ? 'tag-owned (auth key)' : n.owner) +
+      // a shared-in node isn't yours: it has no tag/owner in YOUR tailnet
+      row('owner', n.sharedIn ? 'another tailnet' :
+          (n.ownerKind === 'tag' ? 'tag-owned (auth key)' : n.owner)) +
       (n.routes && n.routes.length ? row('routes', n.routes.join(' ')) : '') +
-      row('reaches', out) + row('reached by', inc) +
+      row('reaches', out) + accessBlock(n) +
       (tags ? '<div class="tags">' + tags + '</div>' : '');
     tip.classList.add('on'); moveTip(mx, my);
   }
@@ -582,6 +616,26 @@
       ctx.beginPath(); ctx.arc(n.x, n.y, r + 4.5, 0, 7); ctx.stroke();
       ctx.restore();
     }
+    // "Exposed": something outside this device can reach it per a live
+    // grant. A small filled badge, not a ring — it must read at a glance
+    // even stacked with the ownership ring above, and at any zoom level.
+    if (n.exposed && !dim) {
+      ctx.save();
+      var bx = n.x + r * 0.72, by = n.y - r * 0.72;
+      ctx.fillStyle = C.surf; ctx.beginPath(); ctx.arc(bx, by, 4, 0, 7); ctx.fill();
+      ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(bx, by, 2.6, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    // "Shared in": Tailscale's actual node-sharing feature — this device
+    // belongs to another tailnet entirely. Opposite corner from "exposed"
+    // and a different colour, since a node can be both at once.
+    if (n.sharedIn && !dim) {
+      ctx.save();
+      var sx = n.x - r * 0.72, sy = n.y + r * 0.72;
+      ctx.fillStyle = C.surf; ctx.beginPath(); ctx.arc(sx, sy, 4, 0, 7); ctx.fill();
+      ctx.fillStyle = C.warm; ctx.beginPath(); ctx.arc(sx, sy, 2.6, 0, 7); ctx.fill();
+      ctx.restore();
+    }
     ctx.globalAlpha = dim ? .28 : 1;
     ctx.fillStyle = (f === n.id) ? C.ink : C.muted;
     ctx.font = (f === n.id ? '600 ' : '') + (W < 620 ? '9.5px ' : '10.5px ') + cssv('--sans');
@@ -668,6 +722,7 @@
     put('k-devices', s.kpi.devices); put('k-online', s.kpi.online);
     put('k-grants', s.kpi.grants); put('k-sites', s.kpi.sites);
     put('k-users', (s.users || []).length);
+    put('k-exposed', s.kpi.exposed); put('k-sharedin', s.kpi.sharedIn);
     // Only touch a table when its content actually changed — replacing
     // innerHTML every 10s would drop any text selection and reset how far the
     // user had scrolled the panel sideways.

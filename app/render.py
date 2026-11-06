@@ -47,6 +47,11 @@ RESERVED = ("dock", "mobile")
 DOCKER_RE = re.compile(r"^172\.(1[6-9]|2[0-9]|3[01])\.")
 TAG_OWNED = "__tagged__"
 KIND = {"tag:client-full": "full", "tag:ha-access": "ha"}
+# Tailscale's own "everyone with this platform role" autogroups. A grant
+# sourced only from these is structural (true of every device, on every
+# tailnet, always) rather than a deliberate share worth flagging — see
+# Tailnet.build_access.
+STRUCTURAL_SRC = {"autogroup:admin", "autogroup:owner"}
 
 
 # --------------------------------------------------------------- HuJSON
@@ -154,12 +159,20 @@ def short_id(name: str, used: set) -> str:
     return cand
 
 
-def expand(target: str, devs: list[dict]) -> list[dict]:
+def expand(target: str, devs: list[dict], hosts: dict | None = None) -> list[dict]:
     """Which devices does a grant source/target refer to?"""
+    if target == "*":
+        return list(devs)
     if target.startswith("tag:"):
         return [d for d in devs if target in d["tags"]]
     if target == "autogroup:internet":
         return [d for d in devs if d["exit"]]          # leaves the net via exit nodes
+    if target.startswith("host:"):
+        # `hosts` aliases a name to one address in the policy file's own
+        # `hosts` map — this is exactly how a device gets exposed to one
+        # specific person/group by name rather than by tag.
+        addr = (hosts or {}).get(target[len("host:"):])
+        return [d for d in devs if addr and d["ip"] == addr]
     if re.match(r"^\d+\.\d+\.\d+\.\d+/\d+$", target):
         return [d for d in devs if target in d["routes"]]   # the announcing router
     return []
@@ -338,6 +351,13 @@ class Tailnet:
                 "online": bool(d.get("connectedToControl")),
                 "update": bool(d.get("updateAvailable")),
                 "user": d.get("user", ""),
+                # Tailscale's actual node-sharing feature: this device belongs
+                # to ANOTHER tailnet and was shared into this one — you don't
+                # own it, can't tag or route through it, it just appears.
+                # There is no equivalent field for the other direction: the
+                # API never tells a tailnet which of ITS OWN devices it has
+                # shared out to someone else, so that can't be shown here.
+                "sharedIn": bool(d.get("isExternal")),
             })
         out.sort(key=lambda x: x["name"])
         return out
@@ -360,6 +380,7 @@ class Tailnet:
 
     # ----------------------------------------------------------- edges
     def build_edges(self, acl: dict, devs: list[dict]) -> tuple[list[dict], list[int]]:
+        hosts = acl.get("hosts") or {}
         edges, per_grant = [], []
         seen = set()
         for g in (acl.get("grants") or []):
@@ -370,9 +391,9 @@ class Tailnet:
                 kind = KIND.get(s, kind)
             n = 0
             for s in srcs:
-                for a in expand(s, devs):
+                for a in expand(s, devs, hosts):
                     for t in dsts:
-                        for b in expand(t, devs):
+                        for b in expand(t, devs, hosts):
                             if a["id"] == b["id"]:
                                 continue
                             key = (a["id"], b["id"], kind)
@@ -387,8 +408,46 @@ class Tailnet:
             per_grant.append(n)
         return edges, per_grant
 
+    def build_access(self, acl: dict, devs: list[dict]) -> dict[str, list[dict]]:
+        """For every device, the actual grants that reach it — not who is on
+        the other end of them. A grant naming one tag is ONE rule here no
+        matter how many devices carry that tag; `expand()` is only used to
+        resolve which devices the grant's dst side covers, so the device
+        this device's owner actually cares about is the tag/group/host that
+        was written in the policy, not a flattened list of peers.
+
+        This is what makes a device "exposed": every key in the returned
+        dict has at least one inbound rule, i.e. something outside itself
+        can reach it via policy. That's a different thing from Tailscale's
+        own node-sharing feature (see `sharedIn` in build_devices) — this is
+        "who does the ACL let in", not "who is this node shared with".
+
+        A grant sourced ENTIRELY from Tailscale's own admin autogroups is
+        skipped — "a tailnet admin can reach everything" is the platform's
+        baseline, true of every device alike, not a deliberate act of
+        exposure worth flagging. A grant naming a real tag or group (even
+        one an org calls "admin") still counts.
+        """
+        hosts = acl.get("hosts") or {}
+        by_id: dict[str, list[dict]] = {}
+        for g in (acl.get("grants") or []):
+            srcs = g.get("src") or []
+            dsts = g.get("dst") or []
+            ips = g.get("ip") or []
+            if srcs and set(srcs) <= STRUCTURAL_SRC:
+                continue
+            targets = {d["id"] for t in dsts for d in expand(t, devs, hosts)}
+            if not targets:
+                continue
+            rule = {"src": srcs, "ip": ips}
+            for did in targets:
+                rules = by_id.setdefault(did, [])
+                if rule not in rules:
+                    rules.append(rule)
+        return by_id
+
     # ----------------------------------------------------------- html bits
-    def device_rows(self, devs: list[dict]) -> str:
+    def device_rows(self, devs: list[dict], access: dict[str, list[dict]]) -> str:
         rows = []
         for d in devs:
             chips = "".join(chip(t) for t in sorted(d["tags"])) or \
@@ -399,6 +458,13 @@ class Tailnet:
                 chips += f'<span class="note">user: {html.escape(d["owner"].split("@")[0])}</span>'
             if d["update"]:
                 chips += '<span class="note">update available</span>'
+            n_rules = len(access.get(d["id"], []))
+            if n_rules:
+                chips = (f'<span class="chip exposed" title="{n_rules} inbound rule'
+                         f'{"s" if n_rules != 1 else ""}">exposed</span>') + chips
+            if d["sharedIn"]:
+                chips = '<span class="chip shared-in" title="owned by another tailnet, ' \
+                        'shared into this one">shared in</span>' + chips
             off = "" if d["online"] else ' <span class="off">offline</span>'
             rows.append(
                 f'<tr><td class="name">{html.escape(d["name"])}{off}</td>'
@@ -556,6 +622,7 @@ class Tailnet:
         acl = parse_acl(acl_text)
         sites = self.build_sites(devs)
         edges, counts = self.build_edges(acl, devs)
+        access = self.build_access(acl, devs)
         users = self.build_users(devs)
 
         node_js = [{"id": d["id"], "name": d["name"], "role": d["role"],
@@ -563,7 +630,14 @@ class Tailnet:
                     "lan": d["lan"], "lanKind": d["lanKind"],
                     "loc": d["site"], "os": d["os"], "owner": d["owner"],
                     "ownerKind": d["ownerKind"],
-                    "tags": d["tags"], "routes": d["routes"], "online": d["online"]}
+                    "tags": d["tags"], "routes": d["routes"], "online": d["online"],
+                    # "exposed" = at least one grant reaches this device from
+                    # outside itself. `access` carries the actual rules (source
+                    # tags/groups + ports) so the UI can say who, not just how
+                    # many. "sharedIn" is the unrelated, real Tailscale feature:
+                    # this node belongs to another tailnet and was shared here.
+                    "exposed": d["id"] in access, "access": access.get(d["id"], []),
+                    "sharedIn": d["sharedIn"]}
                    for d in devs]
 
         return {
@@ -573,8 +647,10 @@ class Tailnet:
             "kpi": {"devices": len(devs),
                     "online": sum(1 for d in devs if d["online"]),
                     "grants": len(acl.get("grants") or []),
-                    "sites": len(sites)},
-            "rows": {"devices": self.device_rows(devs),
+                    "sites": len(sites),
+                    "exposed": len(access),
+                    "sharedIn": sum(1 for d in devs if d["sharedIn"])},
+            "rows": {"devices": self.device_rows(devs, access),
                      "grants": self.grant_rows(acl, counts),
                      "sites": self.site_rows(sites, devs),
                      "users": self.user_rows(users),
@@ -601,6 +677,8 @@ class Tailnet:
                 .replace("__N_GRANTS__", str(data["kpi"]["grants"]))
                 .replace("__N_SITES__", str(data["kpi"]["sites"]))
                 .replace("__N_USERS__", str(len(data["users"])))
+                .replace("__N_EXPOSED__", str(data["kpi"]["exposed"]))
+                .replace("__N_SHAREDIN__", str(data["kpi"]["sharedIn"]))
                 .replace("__REFRESH__", f"{mins} min" if mins else f"{REFRESH}s")
                 .replace("__TAILNET__", self.tailnet_label)
                 .replace("__TAILNET_SHORT__", self.label_short)

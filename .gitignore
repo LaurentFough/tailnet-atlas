@@ -1,3 +1,6 @@
+# macOS
+.DS_Store
+
 # secrets and per-install config
 .env
 .env-*
