@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import re
+import time
 import tomllib
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -52,6 +53,10 @@ KIND = {"tag:client-full": "full", "tag:ha-access": "ha"}
 # tailnet, always) rather than a deliberate share worth flagging — see
 # Tailnet.build_access.
 STRUCTURAL_SRC = {"autogroup:admin", "autogroup:owner"}
+# After the users endpoint answers 404 we stop asking for this long: it is not
+# going to start working in the next five minutes, and the page is fine
+# without it (see Tailnet.fetch_users / ToDone.md).
+USERS_RETRY_AFTER = 24 * 3600
 
 
 # --------------------------------------------------------------- HuJSON
@@ -265,6 +270,8 @@ class Tailnet:
         # Devices that always count as roaming whatever address they report —
         # a cloud VM has no LAN that would place it anywhere meaningful.
         self.always_mobile = set(self.cfg.get("pinned_roaming") or [])
+        # wall-clock time before which fetch_users() won't call the API again
+        self._users_retry_at = 0.0
 
     # ----------------------------------------------------------- fetch
     def _token(self) -> str:
@@ -283,17 +290,41 @@ class Tailnet:
 
     def fetch_users(self) -> list[dict]:
         """Tailnet users. Failing this must not take the page down — ownership
-        is an extra, the map works without it."""
+        is an extra, the map works without it.
+
+        A 404 is treated as "this endpoint isn't available for this tailnet":
+        every real attempt is logged, but after one the call is skipped for
+        USERS_RETRY_AFTER rather than repeated on every refresh and live poll.
+        Other failures (timeouts, 5xx, auth) are retried on the next refresh."""
+        now = time.time()
+        if now < self._users_retry_at:
+            log.debug("[%s] users: skipped, retrying in %d min", self.slug,
+                      (self._users_retry_at - now) // 60)
+            return []
         try:
             r = httpx.get(f"{API}/tailnet/-/users",
                           headers={"Authorization": f"Bearer {self._token()}"}, timeout=30)
             r.raise_for_status()
+            self._users_retry_at = 0.0
             return r.json().get("users") or []
         except Exception as e:
-            code = getattr(getattr(e, "response", None), "status_code", None)
-            hint = (" — Owners table is derived from the device list; the OAuth client "
-                    "may need the `users:read` scope" if code in (401, 403, 404) else "")
-            log.warning("[%s] users not available: %s%s", self.slug, e, hint)
+            resp = getattr(e, "response", None)
+            code = getattr(resp, "status_code", None)
+            body = ""
+            if resp is not None:
+                try:
+                    body = (resp.text or "").strip()[:200]
+                except Exception:
+                    pass
+            extra = f" — response: {body}" if body else ""
+            if code == 404:
+                self._users_retry_at = now + USERS_RETRY_AFTER
+                extra += (f" — endpoint not found for this tailnet; Owners table is derived "
+                          f"from the device list, not asking again for "
+                          f"{USERS_RETRY_AFTER // 3600}h")
+            elif code in (401, 403):
+                extra += " — the OAuth client may need the `users:read` scope"
+            log.warning("[%s] users not available: %s%s", self.slug, e, extra)
             return []
 
     # ----------------------------------------------------------- devices
