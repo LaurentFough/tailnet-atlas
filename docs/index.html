@@ -30,6 +30,13 @@
   .brand{display:flex;align-items:center;gap:11px;font-size:12px;letter-spacing:.16em;
     text-transform:uppercase;color:var(--muted)}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:beat 2.6s infinite}
+  .switcher{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .switcher:empty{display:none}
+  .switcher button{font:11px/1 var(--sans);letter-spacing:.04em;text-transform:uppercase;
+    padding:6px 12px;border-radius:999px;border:1px solid var(--line-2);
+    background:var(--surface);color:var(--muted);cursor:pointer;transition:.15s}
+  .switcher button:hover{color:var(--ink);border-color:var(--accent)}
+  .switcher button.on{background:var(--accent);border-color:var(--accent);color:var(--bg)}
   @keyframes beat{0%{box-shadow:0 0 0 0 rgba(61,220,151,.5)}70%{box-shadow:0 0 0 9px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
   h1{font-size:clamp(26px,4vw,40px);margin:6px 0 4px;letter-spacing:-.02em;font-weight:650}
   .grad{background:linear-gradient(96deg,var(--accent),var(--accent-2));
@@ -73,6 +80,8 @@
   .tip .r{display:flex;justify-content:space-between;gap:16px;color:var(--muted);
     font-family:var(--mono);font-size:11px;padding:1.5px 0}
   .tip .r b{color:var(--ink);font-weight:500}
+  .tip .r.rule{padding-left:9px;opacity:.85}
+  .tip .r.rule span{color:var(--accent)}
   .tip .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
 
   section{margin-top:40px}
@@ -103,6 +112,10 @@
   .chip.client{background:color-mix(in srgb,var(--h-client) 22%,transparent);color:var(--h-client)}
   .chip.home{background:color-mix(in srgb,var(--h-home) 20%,transparent);color:var(--h-home)}
   .chip.proxy,.chip.ha-access{background:color-mix(in srgb,var(--h-proxy) 20%,transparent);color:var(--h-proxy)}
+  .chip.exposed{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent);
+    font-weight:600}
+  .chip.shared-in{background:color-mix(in srgb,var(--warm) 20%,transparent);color:var(--warm);
+    font-weight:600}
   .port{font:11px var(--mono);padding:2px 7px;border-radius:6px;
     background:rgba(109,141,255,.16);color:var(--accent-2)}
   .port.all{background:rgba(246,178,60,.16);color:var(--warm)}
@@ -147,7 +160,8 @@
 <div class="wrap">
   <div class="head">
     <div>
-      <div class="brand"><span class="dot"></span> Tailnet orion · tin-otter.ts.net</div>
+      <div class="brand"><span class="dot"></span> Tailnet <span id="brand-name">orion · tin-otter.ts.net</span></div>
+      <div class="switcher" id="switcher"></div>
       <h1>Access as <span class="grad">Geography</span></h1>
       <p class="lede">Devices grouped by where they physically sit. Lines are grants —
         directed: the source initiates, the target never answers back.</p>
@@ -159,6 +173,8 @@
       <div class="kpi"><b id="k-grants">4</b><span>grants</span></div>
       <div class="kpi"><b id="k-sites">4</b><span>sites</span></div>
       <div class="kpi"><b id="k-users">4</b><span>owners</span></div>
+      <div class="kpi"><b id="k-exposed">12</b><span>exposed</span></div>
+      <div class="kpi"><b id="k-sharedin">1</b><span>shared in</span></div>
     </div>
   </div>
 
@@ -171,7 +187,7 @@
     <!-- outside .stage so they can drop below the map on narrow screens instead
          of covering it; on desktop they are absolutely placed back over it -->
     <div class="legend" id="legend"></div>
-    <div class="stamp"><span id="stamp">atlas.live · 04 Aug 2026 · 15:19:47</span><span id="live" class="live"></span></div>
+    <div class="stamp"><span id="stamp">atlas.live · 06 Nov 2026 · 04:04:09</span><span id="live" class="live"></span></div>
   </div>
 
   <section>
@@ -180,29 +196,29 @@
         network it joined — for the travel routers that is their uplink, not the LAN they serve.</p></div>
     <div class="panel"><table class="tbl">
       <thead><tr><th>Device</th><th>Tailscale IP</th><th>Local · site</th><th>OS</th><th>Roles</th></tr></thead>
-      <tbody id="tb-devices"><tr><td class="name">atlas</td><td class="ip">100.82.62.24</td><td class="ip">172.25.0.3 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip server">server</span></div></td></tr>
-<tr><td class="name">backups</td><td class="ip">100.81.53.21</td><td class="ip">172.22.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip server">server</span></div></td></tr>
+      <tbody id="tb-devices"><tr><td class="name">atlas</td><td class="ip">100.82.62.24</td><td class="ip">172.25.0.3 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip server">server</span></div></td></tr>
+<tr><td class="name">backups</td><td class="ip">100.81.53.21</td><td class="ip">172.22.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip server">server</span></div></td></tr>
 <tr><td class="name">cloud-exit</td><td class="ip">100.82.77.29</td><td class="ip">10.0.19.7 <span class="note">·mobile</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exit">exit</span><span class="note">update available</span></div></td></tr>
-<tr><td class="name">crate</td><td class="ip">100.80.14.8</td><td class="ip">192.168.10.30 <span class="note">·lisbon</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip server">server</span></div></td></tr>
+<tr><td class="name">crate</td><td class="ip">100.80.14.8</td><td class="ip">192.168.10.30 <span class="note">·lisbon</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip server">server</span></div></td></tr>
 <tr><td class="name">doorbell-relay</td><td class="ip">100.82.59.23</td><td class="ip">172.24.0.3 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip ha-access">ha-access</span></div></td></tr>
-<tr><td class="name">hub</td><td class="ip">100.80.11.7</td><td class="ip">192.168.10.20 <span class="note">·lisbon</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exit">exit</span><span class="chip home">home</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">192.168.10.0/24</span></div></td></tr>
+<tr><td class="name">hub</td><td class="ip">100.80.11.7</td><td class="ip">192.168.10.20 <span class="note">·lisbon</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="4 inbound rules">exposed</span><span class="chip exit">exit</span><span class="chip home">home</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">192.168.10.0/24</span></div></td></tr>
 <tr><td class="name">kitchen-tablet <span class="off">offline</span></td><td class="ip">100.80.26.12</td><td class="ip">192.168.10.52 <span class="note">·lisbon</span></td><td class="ip">android</td><td><div class="chips"><span class="chip client">client</span><span class="chip ha-access">ha-access</span></div></td></tr>
 <tr><td class="name">living-room-tv</td><td class="ip">100.80.23.11</td><td class="ip">192.168.10.51 <span class="note">·lisbon</span></td><td class="ip">android</td><td><div class="chips"><span class="chip client">client</span><span class="note">update available</span></div></td></tr>
-<tr><td class="name">metrics</td><td class="ip">100.81.50.20</td><td class="ip">172.21.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip server">server</span><span class="note">update available</span></div></td></tr>
+<tr><td class="name">metrics</td><td class="ip">100.81.50.20</td><td class="ip">172.21.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip server">server</span><span class="note">update available</span></div></td></tr>
 <tr><td class="name">mila-ipad <span class="off">offline</span></td><td class="ip">100.82.74.28</td><td class="ip">172.20.10.4 <span class="note">·mobile</span></td><td class="ip">ios</td><td><div class="chips"><span class="chip client">client</span><span class="chip ha-access">ha-access</span><span class="note">user: mila</span></div></td></tr>
 <tr><td class="name">mila-laptop</td><td class="ip">100.81.41.17</td><td class="ip">10.20.30.44 <span class="note">·berlin</span></td><td class="ip">windows</td><td><div class="chips"><span class="chip full">client-full</span><span class="note">user: mila</span></div></td></tr>
 <tr><td class="name">nadia-pixel</td><td class="ip">100.80.20.10</td><td class="ip">192.168.10.42 <span class="note">·lisbon</span></td><td class="ip">android</td><td><div class="chips"><span class="chip full">client-full</span></div></td></tr>
-<tr><td class="name">notes</td><td class="ip">100.81.47.19</td><td class="ip">172.19.0.3 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip server">server</span></div></td></tr>
-<tr><td class="name">office-nuc</td><td class="ip">100.81.35.15</td><td class="ip">10.20.30.2 <span class="note">·berlin</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exit">exit</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">10.20.30.0/24</span><span class="note">user: mila</span></div></td></tr>
-<tr><td class="name">photos</td><td class="ip">100.81.44.18</td><td class="ip">172.19.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip server">server</span></div></td></tr>
-<tr><td class="name">plotter</td><td class="ip">100.81.38.16</td><td class="ip">10.20.30.31 <span class="note">·berlin</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip client">client</span><span class="note">user: mila</span></div></td></tr>
-<tr><td class="name">recipes</td><td class="ip">100.81.56.22</td><td class="ip">172.23.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip ha-access">ha-access</span><span class="chip server">server</span></div></td></tr>
+<tr><td class="name">notes</td><td class="ip">100.81.47.19</td><td class="ip">172.19.0.3 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip server">server</span></div></td></tr>
+<tr><td class="name">office-nuc</td><td class="ip">100.81.35.15</td><td class="ip">10.20.30.2 <span class="note">·berlin</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip exit">exit</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">10.20.30.0/24</span><span class="note">user: mila</span></div></td></tr>
+<tr><td class="name">photos</td><td class="ip">100.81.44.18</td><td class="ip">172.19.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip server">server</span></div></td></tr>
+<tr><td class="name">plotter</td><td class="ip">100.81.38.16</td><td class="ip">10.20.30.31 <span class="note">·berlin</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip shared-in" title="owned by another tailnet, shared into this one">shared in</span><span class="chip client">client</span><span class="note">user: mila</span></div></td></tr>
+<tr><td class="name">recipes</td><td class="ip">100.81.56.22</td><td class="ip">172.23.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip ha-access">ha-access</span><span class="chip server">server</span></div></td></tr>
 <tr><td class="name">theo-iphone</td><td class="ip">100.80.29.13</td><td class="ip">192.168.10.53 <span class="note">·lisbon</span></td><td class="ip">ios</td><td><div class="chips"><span class="chip client">client</span><span class="chip ha-access">ha-access</span><span class="note">user: theo</span></div></td></tr>
 <tr><td class="name">theo-macbook</td><td class="ip">100.80.32.14</td><td class="ip">192.168.10.54 <span class="note">·lisbon</span></td><td class="ip">macos</td><td><div class="chips"><span class="chip full">client-full</span><span class="note">user: theo</span></div></td></tr>
 <tr><td class="name">thinkpad-x1</td><td class="ip">100.80.17.9</td><td class="ip">192.168.10.41 <span class="note">·lisbon</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip full">client-full</span></div></td></tr>
-<tr><td class="name">trip-router <span class="off">offline</span></td><td class="ip">100.82.71.27</td><td class="ip">172.20.10.6 <span class="note">·mobile</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exit">exit</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">192.168.9.0/24</span></div></td></tr>
-<tr><td class="name">van-router</td><td class="ip">100.82.68.26</td><td class="ip">10.44.2.87 <span class="note">·mobile</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exit">exit</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">192.168.8.0/24</span></div></td></tr>
-<tr><td class="name">wiki</td><td class="ip">100.82.65.25</td><td class="ip">172.26.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip server">server</span></div></td></tr></tbody>
+<tr><td class="name">trip-router <span class="off">offline</span></td><td class="ip">100.82.71.27</td><td class="ip">172.20.10.6 <span class="note">·mobile</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip exit">exit</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">192.168.9.0/24</span></div></td></tr>
+<tr><td class="name">van-router</td><td class="ip">100.82.68.26</td><td class="ip">10.44.2.87 <span class="note">·mobile</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip exit">exit</span><span class="chip server">server</span><span class="chip subnet">subnet</span><span class="note">192.168.8.0/24</span></div></td></tr>
+<tr><td class="name">wiki</td><td class="ip">100.82.65.25</td><td class="ip">172.26.0.2 <span class="note">·dock</span></td><td class="ip">linux</td><td><div class="chips"><span class="chip exposed" title="1 inbound rule">exposed</span><span class="chip server">server</span></div></td></tr></tbody>
     </table></div>
   </section>
 
@@ -250,7 +266,7 @@
       <p>Nothing here is hand-assigned — every device is re-located on each refresh.</p></div>
     <div class="panel"><table class="tbl">
       <thead><tr><th>Step</th><th>Rule</th><th>Why</th></tr></thead>
-      <tbody><tr><td class="name">1. Collect</td><td>Take every private address the device was last seen on (<span class="ip">10.x</span>, <span class="ip">172.16-31.x</span>, <span class="ip">192.168.x</span>).</td><td class="note">Tailscale reports all interfaces, not just the useful one.</td></tr>
+      <tbody id="tb-rules"><tr><td class="name">1. Collect</td><td>Take every private address the device was last seen on (<span class="ip">10.x</span>, <span class="ip">172.16-31.x</span>, <span class="ip">192.168.x</span>).</td><td class="note">Tailscale reports all interfaces, not just the useful one.</td></tr>
 <tr><td class="name">2. Drop self-hosted</td><td>Ignore any address ending in <span class="ip">.1</span> — the gateway of a network the device hands out itself.</td><td class="note">Travel routers carry their own LAN everywhere; it says nothing about location. Same for Docker bridges.</td></tr>
 <tr><td class="name">3. Match a place</td><td><span class="ip">192.168.10.x</span> &rarr; Lisbon · home<br><span class="ip">10.20.30.x</span> &rarr; Berlin · office<br><span class="ip">172.20.10.x</span> &rarr; Mobile · roaming</td><td class="note">Only networks bound to a physical location count. The hotspot range is listed so it is not mistaken for a Docker bridge — both sit inside 172.16/12.</td></tr>
 <tr><td class="name">4. Docker</td><td>Anything left inside <span class="ip">172.16/12</span> joins the Docker @ crate cluster.</td><td class="note">Containers share the host's netns and have no LAN of their own.</td></tr>
@@ -269,9 +285,11 @@
 
 <script>
 (function () {
-  var NODES = [{"id": "atlas", "name": "atlas", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.82.62.24", "lan": "172.25.0.3", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "__tagged__", "ownerKind": "tag", "tags": ["tag:server"], "routes": [], "online": true}, {"id": "backups", "name": "backups", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.53.21", "lan": "172.22.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true}, {"id": "cloudexit", "name": "cloud-exit", "role": "exit", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.77.29", "lan": "10.0.19.7", "lanKind": "lan", "loc": "mobile", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:exit"], "routes": [], "online": true}, {"id": "crate", "name": "crate", "role": "server", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.14.8", "lan": "192.168.10.30", "lanKind": "lan", "loc": "lisbon", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true}, {"id": "doorbellre", "name": "doorbell-relay", "role": "proxy", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.82.59.23", "lan": "172.24.0.3", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "__tagged__", "ownerKind": "tag", "tags": ["tag:ha-access"], "routes": [], "online": true}, {"id": "hub", "name": "hub", "role": "home", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.11.7", "lan": "192.168.10.20", "lanKind": "lan", "loc": "lisbon", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:home", "tag:server", "tag:exit", "tag:subnet"], "routes": ["192.168.10.0/24"], "online": true}, {"id": "kitchentab", "name": "kitchen-tablet", "role": "client", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.26.12", "lan": "192.168.10.52", "lanKind": "lan", "loc": "lisbon", "os": "android", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client", "tag:ha-access"], "routes": [], "online": false}, {"id": "livingroom", "name": "living-room-tv", "role": "client", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.23.11", "lan": "192.168.10.51", "lanKind": "lan", "loc": "lisbon", "os": "android", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client"], "routes": [], "online": true}, {"id": "metrics", "name": "metrics", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.50.20", "lan": "172.21.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true}, {"id": "milaipad", "name": "mila-ipad", "role": "client", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.74.28", "lan": "172.20.10.4", "lanKind": "lan", "loc": "mobile", "os": "ios", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:client", "tag:ha-access"], "routes": [], "online": false}, {"id": "milalaptop", "name": "mila-laptop", "role": "full", "site": "berlin", "siteLabel": "Berlin · office", "ip": "100.81.41.17", "lan": "10.20.30.44", "lanKind": "lan", "loc": "berlin", "os": "windows", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:client-full"], "routes": [], "online": true}, {"id": "nadiapixel", "name": "nadia-pixel", "role": "full", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.20.10", "lan": "192.168.10.42", "lanKind": "lan", "loc": "lisbon", "os": "android", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client-full"], "routes": [], "online": true}, {"id": "notes", "name": "notes", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.47.19", "lan": "172.19.0.3", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true}, {"id": "officenuc", "name": "office-nuc", "role": "server", "site": "berlin", "siteLabel": "Berlin · office", "ip": "100.81.35.15", "lan": "10.20.30.2", "lanKind": "lan", "loc": "berlin", "os": "linux", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:server", "tag:subnet", "tag:exit"], "routes": ["10.20.30.0/24"], "online": true}, {"id": "photos", "name": "photos", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.44.18", "lan": "172.19.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true}, {"id": "plotter", "name": "plotter", "role": "client", "site": "berlin", "siteLabel": "Berlin · office", "ip": "100.81.38.16", "lan": "10.20.30.31", "lanKind": "lan", "loc": "berlin", "os": "linux", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:client"], "routes": [], "online": true}, {"id": "recipes", "name": "recipes", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.56.22", "lan": "172.23.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "__tagged__", "ownerKind": "tag", "tags": ["tag:server", "tag:ha-access"], "routes": [], "online": true}, {"id": "theoiphone", "name": "theo-iphone", "role": "client", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.29.13", "lan": "192.168.10.53", "lanKind": "lan", "loc": "lisbon", "os": "ios", "owner": "theo@github", "ownerKind": "other", "tags": ["tag:client", "tag:ha-access"], "routes": [], "online": true}, {"id": "theomacboo", "name": "theo-macbook", "role": "full", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.32.14", "lan": "192.168.10.54", "lanKind": "lan", "loc": "lisbon", "os": "macos", "owner": "theo@github", "ownerKind": "other", "tags": ["tag:client-full"], "routes": [], "online": true}, {"id": "thinkpadx1", "name": "thinkpad-x1", "role": "full", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.17.9", "lan": "192.168.10.41", "lanKind": "lan", "loc": "lisbon", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client-full"], "routes": [], "online": true}, {"id": "triprouter", "name": "trip-router", "role": "server", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.71.27", "lan": "172.20.10.6", "lanKind": "uplink", "loc": "mobile", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:exit", "tag:server", "tag:subnet"], "routes": ["192.168.9.0/24"], "online": false}, {"id": "vanrouter", "name": "van-router", "role": "server", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.68.26", "lan": "10.44.2.87", "lanKind": "uplink", "loc": "mobile", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:exit", "tag:server", "tag:subnet"], "routes": ["192.168.8.0/24"], "online": true}, {"id": "wiki", "name": "wiki", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.82.65.25", "lan": "172.26.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true}], EDGES = [{"a": "milalaptop", "b": "atlas", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "backups", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "crate", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "hub", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "metrics", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "notes", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "officenuc", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "photos", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "recipes", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "triprouter", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "wiki", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "atlas", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "backups", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "crate", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "hub", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "metrics", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "notes", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "officenuc", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "photos", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "recipes", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "triprouter", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "wiki", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "atlas", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "backups", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "crate", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "hub", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "metrics", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "notes", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "officenuc", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "photos", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "recipes", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "triprouter", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "wiki", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "atlas", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "backups", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "crate", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "hub", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "metrics", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "notes", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "officenuc", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "photos", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "recipes", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "triprouter", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "wiki", "kind": "full", "faint": false}, {"a": "kitchentab", "b": "hub", "kind": "peer", "faint": false}, {"a": "livingroom", "b": "hub", "kind": "peer", "faint": false}, {"a": "milaipad", "b": "hub", "kind": "peer", "faint": false}, {"a": "plotter", "b": "hub", "kind": "peer", "faint": false}, {"a": "theoiphone", "b": "hub", "kind": "peer", "faint": false}, {"a": "doorbellre", "b": "hub", "kind": "ha", "faint": false}, {"a": "kitchentab", "b": "hub", "kind": "ha", "faint": false}, {"a": "milaipad", "b": "hub", "kind": "ha", "faint": false}, {"a": "recipes", "b": "hub", "kind": "ha", "faint": false}, {"a": "theoiphone", "b": "hub", "kind": "ha", "faint": false}, {"a": "atlas", "b": "hub", "kind": "peer", "faint": false}, {"a": "backups", "b": "hub", "kind": "peer", "faint": false}, {"a": "crate", "b": "hub", "kind": "peer", "faint": false}, {"a": "metrics", "b": "hub", "kind": "peer", "faint": false}, {"a": "notes", "b": "hub", "kind": "peer", "faint": false}, {"a": "officenuc", "b": "hub", "kind": "peer", "faint": false}, {"a": "photos", "b": "hub", "kind": "peer", "faint": false}, {"a": "recipes", "b": "hub", "kind": "peer", "faint": false}, {"a": "triprouter", "b": "hub", "kind": "peer", "faint": false}, {"a": "vanrouter", "b": "hub", "kind": "peer", "faint": false}, {"a": "wiki", "b": "hub", "kind": "peer", "faint": false}], SITES = [{"id": "lisbon", "label": "Lisbon · home", "net": "192.168.10.0/24", "fx": 0.19, "fy": 0.28, "fr": 0.267, "tint": "255,209,102", "count": 8}, {"id": "berlin", "label": "Berlin · office", "net": "10.20.30.0/24", "fx": 0.54, "fy": 0.11, "fr": 0.147, "tint": "178,139,250", "count": 3}, {"id": "mobile", "label": "Mobile · roaming", "net": "phones · travel routers", "fx": 0.42, "fy": 0.78, "fr": 0.171, "tint": "45,212,191", "count": 4}, {"id": "dock", "label": "Docker @ crate", "net": "172.16/12 bridges", "fx": 0.78, "fy": 0.46, "fr": 0.267, "tint": "91,140,240", "count": 8}];
+  var NODES = [{"id": "atlas", "name": "atlas", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.82.62.24", "lan": "172.25.0.3", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "__tagged__", "ownerKind": "tag", "tags": ["tag:server"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "backups", "name": "backups", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.53.21", "lan": "172.22.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "cloudexit", "name": "cloud-exit", "role": "exit", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.77.29", "lan": "10.0.19.7", "lanKind": "lan", "loc": "mobile", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:exit"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "crate", "name": "crate", "role": "server", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.14.8", "lan": "192.168.10.30", "lanKind": "lan", "loc": "lisbon", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "doorbellre", "name": "doorbell-relay", "role": "proxy", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.82.59.23", "lan": "172.24.0.3", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "__tagged__", "ownerKind": "tag", "tags": ["tag:ha-access"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "hub", "name": "hub", "role": "home", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.11.7", "lan": "192.168.10.20", "lanKind": "lan", "loc": "lisbon", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:home", "tag:server", "tag:exit", "tag:subnet"], "routes": ["192.168.10.0/24"], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}, {"src": ["tag:client"], "ip": ["443", "8123"]}, {"src": ["tag:ha-access"], "ip": ["8123"]}, {"src": ["tag:server"], "ip": ["514"]}], "sharedIn": false}, {"id": "kitchentab", "name": "kitchen-tablet", "role": "client", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.26.12", "lan": "192.168.10.52", "lanKind": "lan", "loc": "lisbon", "os": "android", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client", "tag:ha-access"], "routes": [], "online": false, "exposed": false, "access": [], "sharedIn": false}, {"id": "livingroom", "name": "living-room-tv", "role": "client", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.23.11", "lan": "192.168.10.51", "lanKind": "lan", "loc": "lisbon", "os": "android", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "metrics", "name": "metrics", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.50.20", "lan": "172.21.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "milaipad", "name": "mila-ipad", "role": "client", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.74.28", "lan": "172.20.10.4", "lanKind": "lan", "loc": "mobile", "os": "ios", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:client", "tag:ha-access"], "routes": [], "online": false, "exposed": false, "access": [], "sharedIn": false}, {"id": "milalaptop", "name": "mila-laptop", "role": "full", "site": "berlin", "siteLabel": "Berlin · office", "ip": "100.81.41.17", "lan": "10.20.30.44", "lanKind": "lan", "loc": "berlin", "os": "windows", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:client-full"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "nadiapixel", "name": "nadia-pixel", "role": "full", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.20.10", "lan": "192.168.10.42", "lanKind": "lan", "loc": "lisbon", "os": "android", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client-full"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "notes", "name": "notes", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.47.19", "lan": "172.19.0.3", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "officenuc", "name": "office-nuc", "role": "server", "site": "berlin", "siteLabel": "Berlin · office", "ip": "100.81.35.15", "lan": "10.20.30.2", "lanKind": "lan", "loc": "berlin", "os": "linux", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:server", "tag:subnet", "tag:exit"], "routes": ["10.20.30.0/24"], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "photos", "name": "photos", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.44.18", "lan": "172.19.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "plotter", "name": "plotter", "role": "client", "site": "berlin", "siteLabel": "Berlin · office", "ip": "100.81.38.16", "lan": "10.20.30.31", "lanKind": "lan", "loc": "berlin", "os": "linux", "owner": "mila@github", "ownerKind": "other", "tags": ["tag:client"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": true}, {"id": "recipes", "name": "recipes", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.81.56.22", "lan": "172.23.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "__tagged__", "ownerKind": "tag", "tags": ["tag:server", "tag:ha-access"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "theoiphone", "name": "theo-iphone", "role": "client", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.29.13", "lan": "192.168.10.53", "lanKind": "lan", "loc": "lisbon", "os": "ios", "owner": "theo@github", "ownerKind": "other", "tags": ["tag:client", "tag:ha-access"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "theomacboo", "name": "theo-macbook", "role": "full", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.32.14", "lan": "192.168.10.54", "lanKind": "lan", "loc": "lisbon", "os": "macos", "owner": "theo@github", "ownerKind": "other", "tags": ["tag:client-full"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "thinkpadx1", "name": "thinkpad-x1", "role": "full", "site": "lisbon", "siteLabel": "Lisbon · home", "ip": "100.80.17.9", "lan": "192.168.10.41", "lanKind": "lan", "loc": "lisbon", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:client-full"], "routes": [], "online": true, "exposed": false, "access": [], "sharedIn": false}, {"id": "triprouter", "name": "trip-router", "role": "server", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.71.27", "lan": "172.20.10.6", "lanKind": "uplink", "loc": "mobile", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:exit", "tag:server", "tag:subnet"], "routes": ["192.168.9.0/24"], "online": false, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "vanrouter", "name": "van-router", "role": "server", "site": "mobile", "siteLabel": "Mobile · roaming", "ip": "100.82.68.26", "lan": "10.44.2.87", "lanKind": "uplink", "loc": "mobile", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:exit", "tag:server", "tag:subnet"], "routes": ["192.168.8.0/24"], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}, {"id": "wiki", "name": "wiki", "role": "server", "site": "dock", "siteLabel": "Docker @ crate", "ip": "100.82.65.25", "lan": "172.26.0.2", "lanKind": "lan", "loc": "dock", "os": "linux", "owner": "nadia@github", "ownerKind": "self", "tags": ["tag:server"], "routes": [], "online": true, "exposed": true, "access": [{"src": ["tag:client-full"], "ip": ["*"]}], "sharedIn": false}], EDGES = [{"a": "milalaptop", "b": "atlas", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "backups", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "crate", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "hub", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "metrics", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "notes", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "officenuc", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "photos", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "recipes", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "triprouter", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "milalaptop", "b": "wiki", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "atlas", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "backups", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "crate", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "hub", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "metrics", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "notes", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "officenuc", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "photos", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "recipes", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "triprouter", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "nadiapixel", "b": "wiki", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "atlas", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "backups", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "crate", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "hub", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "metrics", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "notes", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "officenuc", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "photos", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "recipes", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "triprouter", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "theomacboo", "b": "wiki", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "atlas", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "backups", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "crate", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "hub", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "metrics", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "notes", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "officenuc", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "photos", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "recipes", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "triprouter", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "vanrouter", "kind": "full", "faint": false}, {"a": "thinkpadx1", "b": "wiki", "kind": "full", "faint": false}, {"a": "kitchentab", "b": "hub", "kind": "peer", "faint": false}, {"a": "livingroom", "b": "hub", "kind": "peer", "faint": false}, {"a": "milaipad", "b": "hub", "kind": "peer", "faint": false}, {"a": "plotter", "b": "hub", "kind": "peer", "faint": false}, {"a": "theoiphone", "b": "hub", "kind": "peer", "faint": false}, {"a": "doorbellre", "b": "hub", "kind": "ha", "faint": false}, {"a": "kitchentab", "b": "hub", "kind": "ha", "faint": false}, {"a": "milaipad", "b": "hub", "kind": "ha", "faint": false}, {"a": "recipes", "b": "hub", "kind": "ha", "faint": false}, {"a": "theoiphone", "b": "hub", "kind": "ha", "faint": false}, {"a": "atlas", "b": "hub", "kind": "peer", "faint": false}, {"a": "backups", "b": "hub", "kind": "peer", "faint": false}, {"a": "crate", "b": "hub", "kind": "peer", "faint": false}, {"a": "metrics", "b": "hub", "kind": "peer", "faint": false}, {"a": "notes", "b": "hub", "kind": "peer", "faint": false}, {"a": "officenuc", "b": "hub", "kind": "peer", "faint": false}, {"a": "photos", "b": "hub", "kind": "peer", "faint": false}, {"a": "recipes", "b": "hub", "kind": "peer", "faint": false}, {"a": "triprouter", "b": "hub", "kind": "peer", "faint": false}, {"a": "vanrouter", "b": "hub", "kind": "peer", "faint": false}, {"a": "wiki", "b": "hub", "kind": "peer", "faint": false}], SITES = [{"id": "lisbon", "label": "Lisbon · home", "net": "192.168.10.0/24", "fx": 0.19, "fy": 0.28, "fr": 0.267, "tint": "255,209,102", "count": 8}, {"id": "berlin", "label": "Berlin · office", "net": "10.20.30.0/24", "fx": 0.54, "fy": 0.11, "fr": 0.147, "tint": "178,139,250", "count": 3}, {"id": "mobile", "label": "Mobile · roaming", "net": "phones · travel routers", "fx": 0.42, "fy": 0.78, "fr": 0.171, "tint": "45,212,191", "count": 4}, {"id": "dock", "label": "Docker @ crate", "net": "172.16/12 bridges", "fx": 0.78, "fy": 0.46, "fr": 0.267, "tint": "91,140,240", "count": 8}];
+  var TAILNETS = [{"slug": "demo", "label": "orion"}], CURRENT_NET = "demo";
   var cv = document.getElementById('cv'), stage = document.getElementById('stage');
   var tip = document.getElementById('tip'), legendEl = document.getElementById('legend');
+  var switcherEl = document.getElementById('switcher');
   var ctx = cv.getContext('2d');
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   var W = 0, H = 0, dpr = 1, hover = null, pinned = null, hidden = {};
@@ -287,6 +305,7 @@
                net: cssv('--h-subnet') };
     C.ink = cssv('--ink'); C.muted = cssv('--muted'); C.faint = cssv('--faint');
     C.line = cssv('--line-2'); C.surf = cssv('--surface-2'); C.accent = cssv('--accent');
+    C.warm = cssv('--warm');
   }
   readColors();
 
@@ -452,10 +471,31 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
   }
   function row(k, v) { return '<div class="r"><span>' + k + '</span><b>' + esc(v) + '</b></div>'; }
+  // Who can actually reach this device: the grant, not a peer count. An
+  // "exposed" device's whole point is that the source of a rule matters
+  // more than how many devices happen to sit on the other end of it.
+  function ruleLabel(a) {
+    var srcs = (a.src || []).map(function (s) {
+      return s.indexOf('tag:') === 0 ? s.slice(4) : s;
+    }).join(', ') || '?';
+    var ip = a.ip || [];
+    var ports = (ip.length === 1 && ip[0] === '*') ? 'any' : ip.join(',');
+    return srcs + (ports ? ' → ' + ports : '');
+  }
+  function accessBlock(n) {
+    var rules = n.access || [];
+    if (!rules.length) return row('reached by', 0);
+    var shown = rules.slice(0, 4).map(function (a) {
+      return '<div class="r rule"><span>' + esc(ruleLabel(a)) + '</span></div>';
+    }).join('');
+    var more = rules.length > 4
+      ? '<div class="r rule"><span>+' + (rules.length - 4) + ' more rule(s)</span></div>' : '';
+    return row('reached by', rules.length + ' rule' + (rules.length === 1 ? '' : 's')) + shown + more;
+  }
   function showTip(n, mx, my) {
     if (!n) { tip.classList.remove('on'); return; }
-    var out = 0, inc = 0;
-    EDGES.forEach(function (e) { if (e.a === n.id) out++; else if (e.b === n.id) inc++; });
+    var out = 0;
+    EDGES.forEach(function (e) { if (e.a === n.id) out++; });
     var tags = (n.tags || []).map(function (t) {
       var k = t.replace('tag:', '');
       return '<span class="chip ' + (k === 'client-full' ? 'full' : k) + '">' + k + '</span>';
@@ -463,14 +503,18 @@
     tip.innerHTML =
       '<h4><span style="width:9px;height:9px;border-radius:50%;background:' +
         (C.role[n.role] || C.muted) + ';display:inline-block"></span>' + esc(n.name) +
-        (n.online ? '' : ' <span class="off">offline</span>') + '</h4>' +
+        (n.online ? '' : ' <span class="off">offline</span>') +
+        (n.sharedIn ? ' <span class="chip shared-in">shared in</span>' : '') +
+        (n.exposed ? ' <span class="chip exposed">exposed</span>' : '') + '</h4>' +
       row('site', n.siteLabel) + row('tailscale', n.ip) +
       // routers serve their own LANs; what places them is the uplink they got
       row(n.lanKind === 'uplink' ? 'uplink' : 'local', n.lan) +
       row('os', n.os) +
-      row('owner', n.ownerKind === 'tag' ? 'tag-owned (auth key)' : n.owner) +
+      // a shared-in node isn't yours: it has no tag/owner in YOUR tailnet
+      row('owner', n.sharedIn ? 'another tailnet' :
+          (n.ownerKind === 'tag' ? 'tag-owned (auth key)' : n.owner)) +
       (n.routes && n.routes.length ? row('routes', n.routes.join(' ')) : '') +
-      row('reaches', out) + row('reached by', inc) +
+      row('reaches', out) + accessBlock(n) +
       (tags ? '<div class="tags">' + tags + '</div>' : '');
     tip.classList.add('on'); moveTip(mx, my);
   }
@@ -609,6 +653,26 @@
       ctx.beginPath(); ctx.arc(n.x, n.y, r + 4.5, 0, 7); ctx.stroke();
       ctx.restore();
     }
+    // "Exposed": something outside this device can reach it per a live
+    // grant. A small filled badge, not a ring — it must read at a glance
+    // even stacked with the ownership ring above, and at any zoom level.
+    if (n.exposed && !dim) {
+      ctx.save();
+      var bx = n.x + r * 0.72, by = n.y - r * 0.72;
+      ctx.fillStyle = C.surf; ctx.beginPath(); ctx.arc(bx, by, 4, 0, 7); ctx.fill();
+      ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(bx, by, 2.6, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    // "Shared in": Tailscale's actual node-sharing feature — this device
+    // belongs to another tailnet entirely. Opposite corner from "exposed"
+    // and a different colour, since a node can be both at once.
+    if (n.sharedIn && !dim) {
+      ctx.save();
+      var sx = n.x - r * 0.72, sy = n.y + r * 0.72;
+      ctx.fillStyle = C.surf; ctx.beginPath(); ctx.arc(sx, sy, 4, 0, 7); ctx.fill();
+      ctx.fillStyle = C.warm; ctx.beginPath(); ctx.arc(sx, sy, 2.6, 0, 7); ctx.fill();
+      ctx.restore();
+    }
     ctx.globalAlpha = dim ? .28 : 1;
     ctx.fillStyle = (f === n.id) ? C.ink : C.muted;
     ctx.font = (f === n.id ? '600 ' : '') + (W < 620 ? '9.5px ' : '10.5px ') + cssv('--sans');
@@ -642,7 +706,7 @@
   var siteOf = {};
   SITES.forEach(function (s, i) { s.ph = i * 1.7; s.dx = 0; s.dy = 0; siteOf[s.id] = s; });
   new ResizeObserver(resize).observe(stage);
-  resize(); buildLegend();
+  resize(); buildLegend(); buildSwitcher();
   requestAnimationFrame(frame);
   /* ---- live updates -------------------------------------------------
      The page polls a data-only endpoint while you are looking at it. The
@@ -695,6 +759,7 @@
     put('k-devices', s.kpi.devices); put('k-online', s.kpi.online);
     put('k-grants', s.kpi.grants); put('k-sites', s.kpi.sites);
     put('k-users', (s.users || []).length);
+    put('k-exposed', s.kpi.exposed); put('k-sharedin', s.kpi.sharedIn);
     // Only touch a table when its content actually changed — replacing
     // innerHTML every 10s would drop any text selection and reset how far the
     // user had scrolled the panel sideways.
@@ -704,13 +769,45 @@
     };
     body('tb-devices', s.rows.devices); body('tb-grants', s.rows.grants);
     body('tb-sites', s.rows.sites); body('tb-users', s.rows.users);
+    if (s.rows.rules) body('tb-rules', s.rows.rules);
     if (stampEl) stampEl.textContent = 'atlas.live · ' + s.stamp;
+    if (s.tailnet) {
+      var brandEl = document.getElementById('brand-name');
+      if (brandEl) brandEl.textContent = s.tailnet;
+      document.title = 'Tailnet Atlas — ' + (s.tailnetShort || s.tailnet);
+    }
 
     place(); buildLegend();
   }
 
+  /* ---- tailnet switcher ----------------------------------------------
+     Several tailnets can share this one page. Switching just re-fetches
+     the data-only endpoint for the other slug and reuses apply() — the
+     same path the 10s live poll already takes. */
+  function buildSwitcher() {
+    if (!switcherEl || TAILNETS.length < 2) return;
+    switcherEl.innerHTML = '';
+    TAILNETS.forEach(function (t) {
+      var b = document.createElement('button');
+      b.textContent = t.label;
+      b.className = t.slug === CURRENT_NET ? 'on' : '';
+      b.addEventListener('click', function () { switchNet(t.slug); });
+      switcherEl.appendChild(b);
+    });
+  }
+
+  function switchNet(slug) {
+    if (slug === CURRENT_NET) return;
+    CURRENT_NET = slug;
+    var url = new URL(location.href);
+    url.searchParams.set('net', slug);
+    history.replaceState(null, '', url);
+    buildSwitcher();
+    poll();
+  }
+
   function poll() {
-    fetch('api/state', { cache: 'no-store' })
+    fetch('api/state?net=' + encodeURIComponent(CURRENT_NET), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (s) {
         if (s.error) { setLive('· stale (' + s.error + ')', 'warn'); return; }

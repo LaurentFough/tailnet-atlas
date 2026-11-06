@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Docker
+compose.yml
+
 # secrets and per-install config
 .env
 .env-*

@@ -24,7 +24,11 @@ sys.modules.setdefault("httpx", types.ModuleType("httpx"))
 
 import os  # noqa: E402
 
-os.environ.setdefault("CONFIG_PATH", str(pathlib.Path(__file__).parent / "demo.toml"))
+# render.py loads a registry of tailnets at import time; point it at a
+# one-entry demo manifest with dummy credentials (nothing calls the API).
+os.environ.setdefault("TAILNETS_PATH", str(pathlib.Path(__file__).parent / "tailnets.demo.toml"))
+os.environ.setdefault("DEMO_OAUTH_ID", "demo")
+os.environ.setdefault("DEMO_OAUTH_SECRET", "demo")
 os.environ.setdefault("TEMPLATE_PATH", str(ROOT / "app" / "template.html"))
 
 import render  # noqa: E402
@@ -118,6 +122,8 @@ def devices() -> list[dict]:
             "tags": tags, "os": os_, "user": owner,
             "connectedToControl": online,
             "updateAvailable": i % 9 == 4,
+            # one device is shared in from another tailnet, to show that flag
+            "isExternal": name == "plotter",
             "advertisedRoutes": routes, "enabledRoutes": routes,
             "clientConnectivity": {"endpoints": [f"{e}:41641" for e in eps]},
         })
@@ -125,11 +131,12 @@ def devices() -> list[dict]:
 
 
 def main() -> None:
-    render.fetch = lambda: (devices(), ACL)
-    render.fetch_users = lambda: USERS
+    tn = render.REGISTRY["demo"]
+    tn.fetch = lambda: (devices(), ACL)
+    tn.fetch_users = lambda: USERS
 
-    data = render.build()
-    page = render.render_html(data)
+    data = tn.build()
+    page = tn.render_html(data)
 
     OUT.mkdir(exist_ok=True)
     (OUT / "index.html").write_text(page, encoding="utf-8")

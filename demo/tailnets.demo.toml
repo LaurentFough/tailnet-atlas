@@ -1,0 +1,7 @@
+# Manifest for the fictional tailnet used by make_demo.py. Credentials are
+# dummies (make_demo.py sets them); nothing here ever calls the API.
+[[tailnet]]
+slug             = "demo"
+config           = "demo.toml"
+oauth_id_env     = "DEMO_OAUTH_ID"
+oauth_secret_env = "DEMO_OAUTH_SECRET"
