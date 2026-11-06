@@ -8,7 +8,7 @@
 # The app does NOT need to be a peer of a tailnet to show its map — it only
 # calls that tailnet's read-only OAuth API (devices:core:read,
 # policy_file:read), which works from anywhere on the internet. Only the
-# tailnet you actually serve the page FROM (see compose.yaml/serve.json)
+# tailnet you actually serve the page FROM (see compose.example.yml/serve.json)
 # needs a Tailscale node at all.
 #
 # oauth_id_env / oauth_secret_env name the environment variables that hold
@@ -19,12 +19,12 @@
 
 [[tailnet]]
 slug             = "example-one"
-config           = "config.example.toml"
+config           = "config-example-one-tsnet.toml"
 oauth_id_env     = "TS_OAUTH_CLIENT_ID_EXAMPLE_ONE"
 oauth_secret_env = "TS_OAUTH_SECRET_EXAMPLE_ONE"
 
 # [[tailnet]]
 # slug             = "example-two"
-# config           = "config-example-two.toml"
+# config           = "config-example-two-tsnet.toml"
 # oauth_id_env     = "TS_OAUTH_CLIENT_ID_EXAMPLE_TWO"
 # oauth_secret_env = "TS_OAUTH_SECRET_EXAMPLE_TWO"

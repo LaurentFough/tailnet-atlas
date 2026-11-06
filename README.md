@@ -76,6 +76,7 @@ cd tailnet-atlas
 cp .env.example .env                          # auth key, node name, OAuth client(s)
 cp tailnets.example.toml tailnets.toml        # which tailnets to show
 cp config.example.toml config-<slug>-tsnet.toml   # one per tailnet — your sites and networks
+cp compose.example.yml compose.yml            # then add a volume mount per config-<slug>-tsnet.toml
 docker compose up -d --build
 ```
 
@@ -116,7 +117,7 @@ things people usually bundle together are actually independent:
 * **Serving the page** needs exactly one Tailscale node, reachable via
   `tailscale serve` from whichever tailnet you want the URL to live on.
 
-So `compose.yml` runs a single `ts-tailnet` sidecar (joined to your "home"
+So `compose.yml` (copied from [`compose.example.yml`](compose.example.yml)) runs a single `ts-tailnet` sidecar (joined to your "home"
 tailnet) and a single `app` container namespaced to it — never one pair per
 tailnet. Every tailnet in `tailnets.toml` just adds two more env vars in
 `.env` (`oauth_id_env` / `oauth_secret_env`, named per-tailnet so their

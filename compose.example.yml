@@ -1,9 +1,18 @@
-# Tailnet Atlas — a live map of who can reach what in your tailnet.
+# Tailnet Atlas — a live map of who can reach what in your tailnet(s).
+#
+# Copy to compose.yml (which is gitignored) and add one config mount per tailnet.
 #
 # The app never listens on a public interface: it binds 127.0.0.1 inside the
 # Tailscale sidecar's network namespace, and the only way in is `tailscale
 # serve` (see serve.json — Funnel is explicitly off). Reachable at
 # https://<TS_HOSTNAME>.<your-tailnet>.ts.net once the node is up.
+#
+# One sidecar, one app, one URL: the sidecar only joins the ONE tailnet you
+# serve the page from. Every tailnet the app can SHOW (see tailnets.toml) is
+# read over the plain Tailscale API via its own OAuth client — no extra
+# sidecar or node needed per tailnet. Do NOT mount the same ./data/tailscale
+# directory into a second tailscale container: two daemons sharing one state
+# directory become the same node and fight over its identity.
 services:
   ts-tailnet:
     image: tailscale/tailscale:latest
@@ -38,14 +47,19 @@ services:
     depends_on:
       ts-tailnet:
         condition: service_healthy
+    env_file:
+      # per-tailnet OAuth creds, one pair of vars per tailnets.toml entry —
+      # kept in one file, on one service, so there is no compose-level
+      # ${VAR} collision between tailnets (see .env.example).
+      - .env
     environment:
       TZ: ${TZ:-UTC}
       REFRESH_SECONDS: "300"
-      TS_OAUTH_CLIENT_ID: ${TS_OAUTH_CLIENT_ID:-}
-      TS_OAUTH_SECRET: ${TS_OAUTH_SECRET:-}
     volumes:
       # mounted, not baked in: editing sites should not need an image rebuild
-      - ./config.toml:/app/config.toml:ro
+      - ./tailnets.toml:/app/tailnets.toml:ro
+      # one mount per [[tailnet]] in tailnets.toml; `config` there must match
+      - ./config-example-one-tsnet.toml:/app/config-example-one-tsnet.toml:ro
     restart: unless-stopped
     labels:
       - "autoheal=true"
