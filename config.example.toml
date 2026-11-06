@@ -10,6 +10,27 @@ tailnet = "example · tin-otter.ts.net"
 # drag it into whichever bucket happens to match.
 pinned_roaming = ["cloud-exit"]
 
+# How devices are placed on the map.
+#   "manual" (default) — match each device to a [[site]] below by its PRIVATE
+#                        address prefix. Everything after this block applies.
+#   "auto"             — derive the sites from each device's PUBLIC address (the
+#                        one its traffic leaves through). Devices behind one
+#                        uplink are one place, so two homes that both use
+#                        192.168.1.x stay two sites. [[site]] blocks become
+#                        optional: use them to name or pin a derived site (see
+#                        `public` below). `dock` and `mobile` are added for you.
+# site_mode = "manual"
+#
+# auto mode only:
+#   A cluster becomes a site if it has an anchor (a server, exit node,
+#   home-tagged device or subnet router) or at least this many devices that are
+#   not phones/tablets. Anything else is roaming. One phone or laptop at a café
+#   must not become a site of its own.
+# min_site_devices = 2
+#   Hotspot / tether ranges. A device on one is roaming: its public address is
+#   the carrier's, shared with strangers. (Defaults shown.)
+# hotspot_nets = ["172.20.10.", "192.168.43.", "192.168.42."]
+
 
 # ---------------------------------------------------------------------------
 # Sites. One [[site]] block per place. Order matters twice:
@@ -36,6 +57,12 @@ pinned_roaming = ["cloud-exit"]
 # site's values still resolve to that one site id, so this never creates
 # ambiguity: a device matches exactly one value, same as with one. See the
 # "office" site below.
+#
+# In site_mode = "auto", a site may carry `public = ["203.0.113.7", "198.51.100.0/24"]`
+# instead of `match`: whoever sits behind those addresses (or CIDRs) is that
+# site — whatever its size — and takes its label, tint and fx/fy. A site with
+# neither is just a name for nothing. `match` still works in auto mode and is
+# tried first.
 #
 # fx/fy are a starting position in the frame (0..1). They are only a hint: the
 # layout pushes overlapping regions apart and keeps them inside the canvas, so

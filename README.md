@@ -107,6 +107,45 @@ Positions (`fx`/`fy`) are only a starting hint. The layout pushes overlapping
 regions apart and keeps them inside the frame, and on narrow screens it stacks
 them in a single column, so you do not have to get them right.
 
+## Automatic sites (`site_mode = "auto"`)
+
+Hand-written `[[site]]` blocks match devices by **private** address prefix, and
+private addresses are not unique: every home is `192.168.1.x`, a café can be too.
+With a handful of subnets that gets ambiguous; with many it falls apart.
+
+Set `site_mode = "auto"` in a tailnet's config and sites are derived from the
+**public** address each device's traffic leaves through instead:
+
+1. Docker bridges stay in the Docker cluster, exactly as before.
+2. A device on a hotspot range (`172.20.10.x`, `192.168.43.x`, `192.168.42.x`) is
+   roaming — its public address is the carrier's, shared with strangers.
+3. Devices behind the same public address (IPv4, or the IPv6 `/64`) are one place.
+   A cluster is a **site** if it has an anchor — a server, exit node, home-tagged
+   device or subnet router — or at least `min_site_devices` (default 2) devices that
+   are not phones/tablets. Otherwise it is roaming: one laptop at a café should not
+   become a site.
+4. A device with **no** public address joins the site whose subnet router advertises
+   its LAN address, if exactly one does; otherwise it is roaming. This is only a
+   fallback — matching on private ranges alone is the very thing that collides.
+
+Sites are labelled from their anchor (`hub · 192.168.10.0/24`), or just the anchor's
+name when several sites share a LAN range. Give one a friendly name and a fixed
+place with `public = ["203.0.113.7"]` on a `[[site]]` block. `pinned_roaming` and
+manual `match` rules still work in auto mode, and the layout shrinks and separates
+the regions so dozens of sites stay readable. Nothing leaves your machine: there
+is no IP-to-location lookup, only what the Tailscale API already reports.
+
+Known limits, because the public address is a heuristic:
+
+* A home with two uplinks (load balancing, failover) splits into two sites; pin
+  both addresses to one `[[site]]` with `public = [...]`.
+* Several homes behind one carrier-grade NAT address look like one place.
+* An offline device keeps its last known address, so it stays where it was last seen.
+* A home where only phones are online and there is no server reads as roaming
+  until you pin it.
+
+See `config.example.toml` for the settings. The default is still `manual`.
+
 ## Multiple tailnets, one URL
 
 One process, one Tailscale node, several maps. The trick is that the two

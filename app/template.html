@@ -305,9 +305,18 @@
     var want = SITES.reduce(function (a, s) { return a + Math.PI * s.r * s.r; }, 0);
     var budget = W * H * (narrow ? 0.22 : 0.32);
     // clamped so one lonely region cannot balloon, and never past the frame
-    var fit = Math.min(1.55, Math.max(0.6, Math.sqrt(budget / Math.max(1, want))));
+    // With derived sites there can be dozens. The 0.6 floor meant the circles
+    // could never get small enough to fit, so they overlapped however long the
+    // relaxation ran. With many sites let them shrink much further — but never
+    // below what the nodes inside need (minR). Up to 8 sites nothing changes.
+    var many = SITES.length > 8;
+    var fit = Math.min(1.55, Math.max(many ? 0.2 : 0.6, Math.sqrt(budget / Math.max(1, want))));
     var rMax = Math.min(W - 2 * 6, H - 66 - 6) / 2 - 4;
-    SITES.forEach(function (s) { s.r = Math.min(s.r * fit, rMax); });
+    function minR(s) { return 26 + 4.6 * (s.count || 1); }
+    SITES.forEach(function (s) {
+      var r = Math.min(s.r * fit, rMax);
+      s.r = many ? Math.max(r, Math.min(s.r, minR(s))) : r;
+    });
 
     // On a phone the canvas is tall and narrow, so side-by-side regions leave
     // no room for the captions — they end up printed over their neighbours.
@@ -339,7 +348,11 @@
     // the hint sit in the canvas' top row, so captions must start below them;
     // on narrow ones both live outside the map and only the caption needs room.
     var GAP = narrow ? 52 : 22, EDGE = 6, TOP = narrow ? 44 : 66;
-    for (var it = 0; it < 60; it++) {
+    // Small circles hug the frame, and a node's label hangs below its dot: with
+    // many sites keep a margin that leaves room for it. Unchanged otherwise.
+    var EX = many ? 16 : EDGE, EB = many ? 30 : EDGE;
+    function relax(iters) {
+    for (var it = 0; it < iters; it++) {
       for (var i = 0; i < SITES.length; i++) {
         for (var j = i + 1; j < SITES.length; j++) {
           var a = SITES[i], b = SITES[j];
@@ -352,11 +365,25 @@
         }
       }
       SITES.forEach(function (s) {
-        s.cx = Math.min(Math.max(s.cx, s.r + EDGE), W - s.r - EDGE);
+        s.cx = Math.min(Math.max(s.cx, s.r + EX), W - s.r - EX);
         // extra room on top: the two caption lines live above each circle and
         // the timestamp is pinned to the top-left corner of the canvas
-        s.cy = Math.min(Math.max(s.cy, s.r + TOP), H - s.r - EDGE);
+        s.cy = Math.min(Math.max(s.cy, s.r + TOP), H - s.r - EB);
       });
+    }
+    }
+    function crowded() {
+      for (var i = 0; i < SITES.length; i++)
+        for (var j = i + 1; j < SITES.length; j++)
+          if (Math.hypot(SITES[i].cx - SITES[j].cx, SITES[i].cy - SITES[j].cy) <
+              SITES[i].r + SITES[j].r + 4) return true;
+      return false;
+    }
+    relax(many ? Math.min(400, 60 + 12 * SITES.length) : 60);
+    // Still touching: shrink everything a little (down to minR) and settle again.
+    for (var sh = 0; many && sh < 10 && crowded(); sh++) {
+      SITES.forEach(function (s) { s.r = Math.max(s.r * 0.92, Math.min(s.r, minR(s))); });
+      relax(80);
     }
     var per = {};
     NODES.forEach(function (n) { (per[n.site] = per[n.site] || []).push(n); });
@@ -538,14 +565,26 @@
     ctx.textAlign = 'center';
     ctx.font = '600 10.5px ' + cssv('--mono');
     var cap = s.label.toUpperCase();
-    var lx = clampText(x, Math.max(ctx.measureText(cap).width, 78));
+    // With many sites the captions of neighbours collide. Fit the name to the
+    // width of its own circle, and give the second line only to the site
+    // being looked at; the full text is always in the Sites table below.
+    var many = SITES.length > 8, fid = focusId();
+    var showNet = !many || (fid && byId[fid] && byId[fid].site === s.id);
+    if (many) {
+      var maxW = Math.max(2 * R * 1.25, 70);
+      while (cap.length > 4 && ctx.measureText(cap).width > maxW) cap = cap.slice(0, -2);
+      if (cap.length < s.label.length) cap = cap.replace(/\s+$/, '') + '…';
+    }
+    var lx = clampText(x, Math.max(ctx.measureText(cap).width, many ? 0 : 78));
     var above = y - R - 34 > 4;
     ctx.fillStyle = 'rgba(' + tint + ',.85)';
-    ctx.fillText(cap, lx, above ? y - R - 26 : y + R + 20);
-    ctx.fillStyle = C.faint;
-    ctx.font = '9px ' + cssv('--mono');
-    ctx.fillText(s.net, clampText(x, ctx.measureText(s.net).width),
-                 above ? y - R - 14 : y + R + 32);
+    ctx.fillText(cap, lx, above ? y - R - (many && !showNet ? 14 : 26) : y + R + 20);
+    if (showNet) {
+      ctx.fillStyle = C.faint;
+      ctx.font = '9px ' + cssv('--mono');
+      ctx.fillText(s.net, clampText(x, ctx.measureText(s.net).width),
+                   above ? y - R - 14 : y + R + 32);
+    }
   }
 
   /* Keep a centred text box inside the canvas. */

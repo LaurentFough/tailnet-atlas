@@ -53,12 +53,18 @@ function place(W, H, move) {
   // stacks the regions in a single column and is verified in the browser.
   const want = sites.reduce((a, s) => a + Math.PI * s.r * s.r, 0);
   const budget = W * H * 0.32;
-  const fit = Math.min(1.55, Math.max(0.6, Math.sqrt(budget / Math.max(1, want))));
+  const many = sites.length > 8;   // mirrors template.html: derived layouts can have dozens
+  const fit = Math.min(1.55, Math.max(many ? 0.2 : 0.6, Math.sqrt(budget / Math.max(1, want))));
   const rMax = Math.min(W - 12, H - 72) / 2 - 4;
-  sites.forEach(s => { s.r = Math.min(s.r * fit, rMax); });
+  const minR = s => 26 + 4.6 * (s.n || 1);
+  sites.forEach(s => {
+    const r = Math.min(s.r * fit, rMax);
+    s.r = many ? Math.max(r, Math.min(s.r, minR(s))) : r;
+  });
 
   const GAP = 22, EDGE = 6, TOP = 66;
-  for (let it = 0; it < 60; it++) {
+  const EX = many ? 16 : EDGE, EB = many ? 30 : EDGE;   // mirrors template.html
+  const relax = iters => { for (let it = 0; it < iters; it++) {
     for (let i = 0; i < sites.length; i++)
       for (let j = i + 1; j < sites.length; j++) {
         const a = sites[i], b = sites[j];
@@ -70,9 +76,16 @@ function place(W, H, move) {
         b.cx += ux * push; b.cy += uy * push;
       }
     sites.forEach(s => {
-      s.cx = Math.min(Math.max(s.cx, s.r + EDGE), W - s.r - EDGE);
-      s.cy = Math.min(Math.max(s.cy, s.r + TOP), H - s.r - EDGE);
+      s.cx = Math.min(Math.max(s.cx, s.r + EX), W - s.r - EX);
+      s.cy = Math.min(Math.max(s.cy, s.r + TOP), H - s.r - EB);
     });
+  } };
+  const crowded = () => sites.some((a, i) => sites.slice(i + 1).some(
+    b => Math.hypot(a.cx - b.cx, a.cy - b.cy) < a.r + b.r + 4));
+  relax(many ? Math.min(400, 60 + 12 * sites.length) : 60);
+  for (let sh = 0; many && sh < 10 && crowded(); sh++) {
+    sites.forEach(s => { s.r = Math.max(s.r * 0.92, Math.min(s.r, minR(s))); });
+    relax(80);
   }
 
   const per = {};
