@@ -83,6 +83,8 @@
   .tip .r.rule{padding-left:9px;opacity:.85}
   .tip .r.rule span{color:var(--accent)}
   .tip .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
+  .tip .r.why{display:block}
+  .tip .r.why b{display:block;font-weight:400;margin-top:2px;line-height:1.35;white-space:normal;max-width:300px;color:var(--muted)}
 
   section{margin-top:40px}
   .sec{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
@@ -501,6 +503,7 @@
       // routers serve their own LANs; what places them is the uplink they got
       row(n.lanKind === 'uplink' ? 'uplink' : 'local', n.lan) +
       (n.isp ? row('network', n.isp) : '') +
+      (n.why ? '<div class="r why"><span>placed</span><b>' + esc(n.why) + '</b></div>' : '') +
       row('os', n.os) +
       // a shared-in node isn't yours: it has no tag/owner in YOUR tailnet
       row('owner', n.sharedIn ? 'another tailnet' :

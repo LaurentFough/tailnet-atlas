@@ -69,6 +69,15 @@ USERS_RETRY_AFTER = 24 * 3600
 # strangers — so it must never anchor or join a site. iOS, Android, Android USB.
 HOTSPOT_PREFIXES = ("172.20.10.", "192.168.43.", "192.168.42.")
 MOBILE_OS = {"ios", "android"}
+# LAN ranges that routers ship with, so thousands of unrelated homes share them.
+# Seeing one at two places proves nothing, so it is never used to merge a lone
+# server into a site (see Tailnet.assign_sites). Extend with `common_lans`.
+COMMON_LANS = {"192.168.0.0/24", "192.168.1.0/24", "192.168.2.0/24", "192.168.8.0/24",
+               "192.168.100.0/24", "192.168.178.0/24", "10.0.0.0/24", "10.0.1.0/24"}
+
+
+def lan24(ip: str) -> str:
+    return str(ipaddress.ip_network(f"{ip}/24", strict=False))
 # Documentation ranges are not "global" to the ipaddress module, but they are
 # what a demo or a test uses as a stand-in for a public address.
 _DOC_NETS = [ipaddress.ip_network(n) for n in
@@ -343,6 +352,11 @@ class Tailnet:
         self.auto = str(self.cfg.get("site_mode", "manual")).lower() == "auto"
         self.min_site_devices = max(1, int(self.cfg.get("min_site_devices", 2)))
         self.hotspot_prefixes = tuple(multi(self.cfg.get("hotspot_nets"))) or HOTSPOT_PREFIXES
+        try:
+            self.common_lans = COMMON_LANS | {str(ipaddress.ip_network(x, strict=False))
+                                             for x in multi(self.cfg.get("common_lans"))}
+        except ValueError as e:
+            raise SystemExit(f"[{self.slug}] common_lans: {e}")
         # Networks (ASNs) that count as mobile carriers. The name heuristic in asn.py
         # is only a hint; these lists are the authority and win over it.
         def _asns(key: str) -> set[int]:
@@ -498,7 +512,19 @@ class Tailnet:
                 site = "mobile"
             enabled = d.get("enabledRoutes") or []
             routes = [r for r in enabled if r not in ("0.0.0.0/0", "::/0")]
+            if name in self.always_mobile:
+                why = "pinned_roaming in the config"
+            elif site == "dock":
+                why = "container bridge address (172.16/12)"
+            elif site == "mobile":
+                why = ("on a hotspot range" if self.auto else
+                       "no configured prefix matched (or it is the roaming range)")
+            elif site:
+                why = "matched a configured prefix"
+            else:
+                why = ""            # auto mode decides in assign_sites()
             out.append({
+                "why": why,
                 "id": short_id(name, used), "name": name, "tags": tags,
                 "ip": (d.get("addresses") or ["—"])[0],
                 "lan": lan, "lanKind": "uplink" if is_wan else "lan", "site": site,
@@ -562,18 +588,29 @@ class Tailnet:
                                            device or subnet router) or at
                                            least `min_site_devices` devices
                                            that are not phones/tablets;
-                                           otherwise roaming. A `public =`
+                                           otherwise roaming — or, if most
+                                           are on a mobile network and
+                                           nothing anchors them, roaming
+                                           whatever the size. A `public =`
                                            pin on a [[site]] overrides this.
-          3. no public address at all   -> the site of the one subnet router
-                                           whose routes contain its LAN
-                                           address; if none or several,
-                                           roaming. Only ever a fallback: a
-                                           café can use 192.168.1.x too.
+          3. a lone anchor              -> joins another site when its LAN
+                                           (not a vendor-default range)
+                                           belongs to exactly one of them:
+                                           the same LAN behind a different
+                                           egress (VPN, second WAN).
+          4. no public address at all   -> the site whose subnet router
+                                           advertises its LAN address, else
+                                           the one site where its LAN is
+                                           seen; none or several: roaming.
+                                           Only ever a fallback.
+        Every decision leaves its reason in d["why"], shown in the tooltip.
         """
         todo = [d for d in devs if d["site"] is None]
         for d in todo:
-            if any(ip.startswith(self.hotspot_prefixes) for ip in d["_pool"]):
+            hot = next((ip for ip in d["_pool"] if ip.startswith(self.hotspot_prefixes)), None)
+            if hot:
                 d["site"] = "mobile"
+                d["why"] = f"on a hotspot range ({hot}): its public address is a carrier's"
         todo = [d for d in todo if d["site"] is None]
 
         parent = {d["id"]: d["id"] for d in todo}
@@ -596,19 +633,50 @@ class Tailnet:
             if d["_pubs"]:
                 groups.setdefault(find(d["id"]), []).append(d)
         metas = [m for m in (self._place_group(g) for g in groups.values()) if m]
-        # A LAN range that every home shares (192.168.1.0/24) says nothing about
-        # which site is which, so it only goes into a label while it is unique.
-        shared = {k for k, n in Counter(m["_lan"] for m in metas if m["_lan"]).items() if n > 1}
-        for m in metas:
-            if m["_lan"] in shared:
-                m["label"] = m["_anchor"] or m["_org"] or m["_key"]
-            for k in ("_lan", "_anchor", "_key", "_org"):
-                m.pop(k)
 
+        def lans(d: dict) -> set[str]:
+            return {lan24(ip) for ip in d["_pool"] if not DOCKER_RE.match(ip)}
+
+        def seen_at() -> dict[str, set[str]]:
+            """LAN (/24) -> the sites it has been seen at, from placed devices."""
+            m: dict[str, set[str]] = {}
+            for d in devs:
+                if d["site"] not in (None, "mobile", "dock"):
+                    for n in lans(d):
+                        m.setdefault(n, set()).add(d["site"])
+            return m
+
+        def join(d: dict, sid: str) -> None:
+            d["site"] = sid
+            meta = next((x.get("siteMeta") for x in devs
+                         if x["site"] == sid and x.get("siteMeta")), None)
+            if meta:
+                d["siteMeta"] = meta
+            else:
+                d.pop("siteMeta", None)
+
+        size = Counter(d["site"] for d in devs if d["site"])
+        # 3. a lone anchor on a LAN that belongs to exactly one other (real) site
+        seen = seen_at()
+        for d in [x for x in todo if x["site"] and x["site"].startswith("a-")
+                  and size[x["site"]] == 1]:
+            own = d["site"]
+            cands = {sid for n in lans(d) if n not in self.common_lans
+                     for sid in seen.get(n, ()) if sid != own and size[sid] >= 2}
+            if len(cands) == 1:
+                n = sorted(n for n in lans(d) if n not in self.common_lans
+                           and cands <= seen.get(n, set()))[0]
+                join(d, cands.pop())
+                d["why"] = (f"alone at its public address, but its LAN {n} is seen at "
+                            "exactly one other site, so it joins that site "
+                            "(same LAN, different egress — a VPN or second WAN?)")
+        seen = seen_at()
+
+        # 4. no public address at all
         for d in todo:
             if d["site"] is not None or d["_pubs"]:
                 continue
-            cands = set()
+            routed = {}
             for r in devs:
                 if r is d or r["site"] in (None, "mobile", "dock"):
                     continue
@@ -616,17 +684,36 @@ class Tailnet:
                     for ip in d["_pool"]:
                         try:
                             if ipaddress.ip_address(ip) in ipaddress.ip_network(route, strict=False):
-                                cands.add(r["site"])
+                                routed[r["site"]] = (r["name"], route, ip)
                         except ValueError:
                             pass
+            if len(routed) == 1:
+                sid, (rname, route, ip) = next(iter(routed.items()))
+                join(d, sid)
+                d["why"] = (f"no public address; its LAN address {ip} is inside {route}, "
+                            f"advertised by {rname}")
+                continue
+            cands = {sid for n in lans(d) for sid in seen.get(n, ())}
             if len(cands) == 1:
-                d["site"] = cands.pop()
-                meta = next((x.get("siteMeta") for x in devs if x["site"] == d["site"]
-                             and x.get("siteMeta")), None)
-                if meta:
-                    d["siteMeta"] = meta
+                join(d, next(iter(cands)))
+                d["why"] = ("no public address; its LAN "
+                            f"{', '.join(sorted(lans(d) & set(seen)))} is seen at only one "
+                            "site, so it joins that site")
             else:
                 d["site"] = "mobile"
+                d["why"] = ("roaming: no public address, and its LAN "
+                            + (f"is seen at {len(cands)} different sites" if cands
+                               else "is not seen at any site"))
+
+        # A LAN range that every home shares (192.168.1.0/24) says nothing about
+        # which site is which, so it only goes into a label while it is unique.
+        live = [m for m in metas if any(d.get("siteMeta") is m for d in devs)]
+        shared = {k for k, n in Counter(m["_lan"] for m in live if m["_lan"]).items() if n > 1}
+        for m in metas:
+            if m in live and m["_lan"] in shared:
+                m["label"] = m["_anchor"] or m["_org"] or m["_key"]
+            for k in ("_lan", "_anchor", "_key", "_org"):
+                m.pop(k)
 
     def _place_group(self, grp: list[dict]) -> dict | None:
         """Give one same-uplink cluster a site. -> its meta if it is a derived
@@ -634,27 +721,34 @@ class Tailnet:
         # IPv4 first: it reads better as a label and is the more stable anchor
         keys = sorted({pub_key(a) for d in grp for a in d["_pubs"]},
                       key=lambda k: (":" in k, k))
-        pin = next((sid for net, sid in self.public_pins
+        pin = next(((sid, a) for net, sid in self.public_pins
                     for d in grp for a in d["_pubs"]
                     if ipaddress.ip_address(a) in net), None)
         anchors = sorted((d for d in grp if d["role"] in ("home", "server", "exit") or d["subnet"]),
                          key=lambda d: (d["role"] != "home", not d["subnet"], d["name"]))
         people = [d for d in grp if d["os"] not in MOBILE_OS]
-        if pin:
+        others = len(grp) - 1
+
+        def settle(site: str, why: str) -> None:
             for d in grp:
-                d["site"] = pin
+                d["site"], d["why"] = site, why
+
+        if pin:
+            settle(pin[0], f"its public address {pin[1]} is pinned to this site in the config")
             return None
         # Most devices on a carrier network, and nothing anchoring them: roaming,
         # however many laptops share the tether. (An anchor — a server on an LTE
         # router, say — keeps it a place: plenty of homes ARE on a mobile uplink.)
         infos = [d["isp"] for d in grp if d.get("isp")]
         if not anchors and infos and 2 * sum(map(self.is_mobile_net, infos)) > len(infos):
-            for d in grp:
-                d["site"] = "mobile"
+            n, desc = Counter(infos).most_common(1)[0][0]
+            settle("mobile", f"roaming: nothing anchors it and most devices at {keys[0]} are on "
+                             f"a mobile network (AS{n} {asn.org(desc)[:30]})")
             return None
         if not anchors and len(people) < self.min_site_devices:
-            for d in grp:
-                d["site"] = "mobile"
+            settle("mobile", f"roaming: no anchor (server, exit node, home tag, subnet router) "
+                             f"and only {len(people)} non-phone device(s) at {keys[0]}; "
+                             f"a site needs {self.min_site_devices}")
             return None
         digest = hashlib.sha1(keys[0].encode()).hexdigest()
         h = int(digest, 16)
@@ -675,9 +769,12 @@ class Tailnet:
                 "tint": SITE_TINTS[(h // 1000000) % len(SITE_TINTS)],
                 "_lan": lan[0] if lan else None, "_anchor": a0, "_key": keys[0],
                 "_org": isp_name}
+        reason = (f"anchored by {a0}" if a0 else f"{len(people)} non-phone devices share it")
         for d in grp:
             d["site"] = "a-" + digest[:6]
             d["siteMeta"] = meta
+            d["why"] = (f"shares public address {keys[0]} with {others} other device(s)"
+                        if others else f"alone at public address {keys[0]}") + f" — a site: {reason}"
         return meta
 
     def build_sites(self, devs: list[dict]) -> list[dict]:
@@ -983,9 +1080,13 @@ class Tailnet:
              "an anchor — a server, exit node, home-tagged device or subnet router "
              f"— or at least {self.min_site_devices} devices that are not phones or tablets.",
              "Otherwise one phone or laptop at a café would become a site of its own."),
+            ("Lone anchor",
+             "A server alone at its public address joins another site when its LAN belongs "
+             "to exactly one of them. Vendor-default ranges (192.168.1.0/24…) never count.",
+             "Same LAN behind a different egress (VPN, second WAN) is one place."),
             ("No public address",
-             "Joins the one site whose subnet router advertises its LAN address; "
-             "none, or several, means roaming.",
+             "Joins the site whose subnet router advertises its LAN address, else the one "
+             "site where its LAN is seen; none, or several, means roaming.",
              "Only a fallback: a café can use 192.168.1.x too."),
             ("Otherwise",
              f"{self.site_meta['mobile']['label']}.",
@@ -1055,7 +1156,7 @@ class Tailnet:
                     # many. "sharedIn" is the unrelated, real Tailscale feature:
                     # this node belongs to another tailnet and was shared here.
                     "exposed": d["id"] in access, "access": access.get(d["id"], []),
-                    "sharedIn": d["sharedIn"],
+                    "sharedIn": d["sharedIn"], "why": d["why"],
                     # "AS3243 MEO - ..." — who connects this device, for the tooltip
                     "isp": (f"AS{d['isp'][0]} {asn.org(d['isp'][1])[:34]}" if d.get("isp") else "")}
                    for d in devs]

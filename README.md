@@ -124,9 +124,19 @@ Set `site_mode = "auto"` in a tailnet's config and sites are derived from the
    device or subnet router — or at least `min_site_devices` (default 2) devices that
    are not phones/tablets. Otherwise it is roaming: one laptop at a café should not
    become a site.
-4. A device with **no** public address joins the site whose subnet router advertises
-   its LAN address, if exactly one does; otherwise it is roaming. This is only a
-   fallback — matching on private ranges alone is the very thing that collides.
+4. A **lone server** — alone at its own public address, as happens behind a VPN or a
+   second WAN — joins another site when its LAN belongs to exactly one of them.
+   Vendor-default ranges (`192.168.1.0/24`, `10.0.0.0/24`…) never count, since
+   thousands of homes share them (`common_lans` adds more).
+5. A device with **no** public address (Tailscale sometimes reports only its LAN
+   address) joins the site whose subnet router advertises its LAN address, else the
+   one site where that LAN is seen; with none or several it is roaming. These are only
+   fallbacks — matching on private ranges alone is the very thing that collides.
+
+**Why is this device here?** Hover any node: the tooltip's **placed** row gives the
+reason in a sentence ("alone at public address …", "its LAN 10.0.8.0/24 is seen at only
+one site…", "roaming: no anchor…"). Start there when a device is somewhere you did not
+expect.
 
 Sites are labelled from their anchor (`hub · 192.168.10.0/24`), or just the anchor's
 name when several sites share a LAN range. Give one a friendly name and a fixed

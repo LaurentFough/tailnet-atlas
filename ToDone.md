@@ -38,6 +38,12 @@ response body, and the call is skipped for 24 h (`USERS_RETRY_AFTER` in
 
 ## Auto sites and flags — known gaps (branch `feature/auto-sites`)
 
+Reported on a real tailnet and addressed (check against live data): LAN-only devices
+landing in roaming, and a lone server (`0xc0nsole`) forming its own site. Both now have
+fallbacks, and every device's tooltip says why it was placed. If `0xc0nsole` still sits
+alone, read its **placed** row: the cause is its public address/LAN, and the fix is either
+a `public = [...]` pin or an entry in `common_lans`.
+
 Done: sites derived from public addresses (`site_mode = "auto"`), layout that holds up
 to dozens of sites, country flags from the DB-IP Lite file, 🐳/📱/🌐 for sites without
 a country. Left for later:

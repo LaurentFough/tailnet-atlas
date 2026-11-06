@@ -28,6 +28,11 @@ pinned_roaming = ["cloud-exit"]
 #   cellular / LTE counts, and so do the ASNs you list. The name check is only a
 #   hint — it misses carriers that do not say so ("Vodafone Idea") and can hit
 #   non-carriers — so list what you know. `not_mobile_asns` wins over both.
+#   LAN ranges that routers ship with and thousands of homes share. Seeing one at
+#   two places proves nothing, so a lone server on one is never merged into a
+#   site because of it. Defaults: 192.168.0.0/24, .1.0/24, .2.0/24, .8.0/24,
+#   .100.0/24, .178.0/24, 10.0.0.0/24, 10.0.1.0/24. List more here.
+# common_lans = ["192.168.50.0/24"]
 # mobile_asns     = [38266]
 # not_mobile_asns = [1766]
 #   A cluster becomes a site if it has an anchor (a server, exit node,
