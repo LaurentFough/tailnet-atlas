@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Download the DB-IP "IP to Country Lite" database for the map's country flags.
+"""Download the two small databases the map can use to read public addresses.
 
-    python3 scripts/fetch-geoip.py                 # -> data/geo/dbip-country-lite.csv.gz
-    python3 scripts/fetch-geoip.py --out other.gz
+    python3 scripts/fetch-geoip.py              # both -> data/geo/
+    python3 scripts/fetch-geoip.py --only geo   # country flags only
+    python3 scripts/fetch-geoip.py --only asn   # mobile-carrier detection only
+    python3 scripts/fetch-geoip.py --dir /path
 
-DB-IP publishes a new file every month (CC BY 4.0 — the page credits DB-IP
-automatically whenever the file is loaded). This tries the current month and
-falls back to the previous one, since a new month's file can lag by a day or
-two. Only the database is downloaded; the app looks addresses up locally and
-no address of yours is ever sent anywhere.
+  geo  DB-IP "IP to Country Lite"  -> dbip-country-lite.csv.gz   (~5 MB, monthly)
+       CC BY 4.0: the page credits DB-IP automatically when the file is loaded.
+  asn  iptoasn.com "ip2asn-combined" -> ip2asn-combined.tsv.gz   (~11 MB, hourly)
+       Public domain (PDDL 1.0): no attribution needed.
 
-compose mounts ./data/geo read-only into the app, which reloads the file when
-it changes — so re-running this monthly (cron is fine) needs no restart.
-Standard library only.
+Only the databases are downloaded; the app looks addresses up locally, so no
+address of yours is ever sent anywhere. compose mounts ./data/geo read-only into
+the app, which reloads either file when it changes — re-running this from cron
+needs no restart. Both files are optional: without one, that feature is just off.
+A broken download never replaces a good file. Standard library only.
 """
 from __future__ import annotations
 
@@ -28,69 +31,85 @@ import urllib.error
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-URL = "https://download.db-ip.com/free/dbip-country-lite-{ym}.csv.gz"
+UA = {"User-Agent": "tailnet-atlas-fetch/1.0"}     # db-ip.com answers 403 to urllib's default
 
 
-def months(n: int = 3):
+def _months(n: int = 3):
     d = datetime.date.today().replace(day=1)
     for _ in range(n):
         yield d.strftime("%Y-%m")
         d = (d - datetime.timedelta(days=1)).replace(day=1)
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--out", default=str(ROOT / "data" / "geo" / "dbip-country-lite.csv.gz"))
-    a = ap.parse_args()
-    out = pathlib.Path(a.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
+SOURCES = {
+    "geo": {
+        "file": "dbip-country-lite.csv.gz", "delimiter": ",", "min_rows": 1000,
+        # a new month's file can lag a day or two, so fall back to the previous ones
+        "urls": lambda: [f"https://download.db-ip.com/free/dbip-country-lite-{ym}.csv.gz"
+                         for ym in _months()],
+    },
+    "asn": {
+        "file": "ip2asn-combined.tsv.gz", "delimiter": "\t", "min_rows": 1000,
+        "urls": lambda: ["https://iptoasn.com/data/ip2asn-combined.tsv.gz"],
+    },
+}
 
+
+def fetch(name: str, out_dir: pathlib.Path) -> bool:
+    src, dest = SOURCES[name], out_dir / SOURCES[name]["file"]
     tmp = None
-    for ym in months():
-        url = URL.format(ym=ym)
+    for url in src["urls"]():
         try:
-            print(f"trying {url}")
-            fd, tmp = tempfile.mkstemp(dir=out.parent, suffix=".part")
-            # db-ip.com answers 403 to urllib's default User-Agent
-            req = urllib.request.Request(url, headers={"User-Agent": "tailnet-atlas-fetch/1.0"})
-            with os.fdopen(fd, "wb") as fh, urllib.request.urlopen(req, timeout=60) as r:
+            print(f"[{name}] trying {url}")
+            fd, tmp = tempfile.mkstemp(dir=out_dir, suffix=".part")
+            with os.fdopen(fd, "wb") as fh, urllib.request.urlopen(
+                    urllib.request.Request(url, headers=UA), timeout=120) as r:
                 while chunk := r.read(1 << 20):
                     fh.write(chunk)
             break
         except urllib.error.HTTPError as e:
-            if tmp:
-                pathlib.Path(tmp).unlink(missing_ok=True)
+            pathlib.Path(tmp).unlink(missing_ok=True)
             tmp = None
             if e.code != 404:
-                print(f"fetch-geoip: {e.code} {e.reason}", file=sys.stderr)
-                return 1
+                print(f"[{name}] {e.code} {e.reason}", file=sys.stderr)
+                return False
         except urllib.error.URLError as e:
             if tmp:
                 pathlib.Path(tmp).unlink(missing_ok=True)
-            print(f"fetch-geoip: could not reach db-ip.com: {e.reason}", file=sys.stderr)
-            return 1
+            print(f"[{name}] could not reach the server: {e.reason}", file=sys.stderr)
+            return False
     else:
-        print("fetch-geoip: no file found for the last 3 months", file=sys.stderr)
-        return 1
+        print(f"[{name}] no file found", file=sys.stderr)
+        return False
 
     # Do not replace a good file with a broken download.
     try:
         rows, sample = 0, None
         with gzip.open(tmp, "rt", encoding="utf-8", newline="") as fh:
-            for row in csv.reader(fh):
+            for row in csv.reader(fh, delimiter=src["delimiter"]):
                 if len(row) >= 3:
                     rows += 1
                     sample = sample or row
-        if rows < 1000:
+        if rows < src["min_rows"]:
             raise ValueError(f"only {rows} rows")
     except Exception as e:
         pathlib.Path(tmp).unlink(missing_ok=True)
-        print(f"fetch-geoip: downloaded file is not usable ({e}); kept the old one",
-              file=sys.stderr)
-        return 1
-    os.replace(tmp, out)            # atomic: the app never sees a half-written file
-    print(f"ok: {rows} ranges -> {out}  (e.g. {','.join(sample)})")
-    return 0
+        print(f"[{name}] downloaded file is not usable ({e}); kept the old one", file=sys.stderr)
+        return False
+    os.replace(tmp, dest)           # atomic: the app never sees a half-written file
+    print(f"[{name}] ok: {rows} ranges -> {dest}")
+    return True
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--only", choices=sorted(SOURCES), help="fetch just one database")
+    ap.add_argument("--dir", default=str(ROOT / "data" / "geo"))
+    a = ap.parse_args()
+    out = pathlib.Path(a.dir)
+    out.mkdir(parents=True, exist_ok=True)
+    results = [fetch(n, out) for n in ([a.only] if a.only else SOURCES)]
+    return 0 if all(results) else 1
 
 
 if __name__ == "__main__":

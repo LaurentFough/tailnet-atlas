@@ -42,12 +42,13 @@ Done: sites derived from public addresses (`site_mode = "auto"`), layout that ho
 to dozens of sites, country flags from the DB-IP Lite file, 🐳/📱/🌐 for sites without
 a country. Left for later:
 
-1. **ASN-based roaming detection.** Today roaming is decided by hotspot ranges, device
-   OS and cluster size only. Looking up each public address's network (ASN, e.g. from
-   iptoasn.com's free file, downloaded and read locally like the flags) would let known
-   mobile carriers mark a device as roaming, and let sites be labelled by ISP. Mobile
-   and fixed service often share one ASN, so it can only be a hint, with a short editable
-   list of known mobile ASNs.
+1. **ASN-based roaming — done (v1), with caveats.** `app/asn.py` reads iptoasn.com's file;
+   a no-anchor cluster mostly on a mobile network is roaming, and sites are labelled by
+   ISP. The carrier check is a *name* heuristic (222 of ~87k networks match; it misses
+   carriers that do not say "mobile", e.g. Vodafone Idea, Orange, and can hit non-carriers,
+   e.g. Exxon Mobil) plus the config's `mobile_asns` / `not_mobile_asns`. Still to do:
+   grow a vetted default list of mobile ASNs per country instead of leaving it all to
+   each user; consider treating hosting/datacenter ASNs (cloud VMs) as their own kind.
 2. **Churn-based roaming.** A device whose public address keeps changing is roaming. Needs a
    small state file in `data/`; the app has no persistence today.
 3. **Tag hints for location.** An opt-in convention such as `tag:site-lisbon` to name or

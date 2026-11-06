@@ -135,6 +135,16 @@ manual `match` rules still work in auto mode, and the layout shrinks and separat
 the regions so dozens of sites stay readable. Nothing leaves your machine: there
 is no IP-to-location lookup, only what the Tailscale API already reports.
 
+**Mobile networks.** With the optional ASN file (see below), a cluster with no anchor
+whose devices are mostly on a mobile carrier's network is roaming too, however many
+laptops share the tether, and a site with no anchor is named after its ISP. The
+carrier check reads the network's *name* (words like mobile, cellular, LTE) and your
+`mobile_asns` / `not_mobile_asns` lists, which win. The name check is a hint: it
+catches networks that say so (T-Mobile, China Mobile, Two Degrees…) and misses ones
+that do not (Vodafone Idea, Orange), and mobile and fixed service often share an
+ASN — so list the ASNs you know. A server or other anchor on a mobile uplink still
+makes a place, since many homes are on LTE routers.
+
 Known limits, because the public address is a heuristic:
 
 * A home with two uplinks (load balancing, failover) splits into two sites; pin
@@ -146,7 +156,25 @@ Known limits, because the public address is a heuristic:
 
 See `config.example.toml` for the settings. The default is still `manual`.
 
-## Country flags
+## Country flags and network names
+
+Two optional databases, both read locally — nothing is ever sent anywhere:
+
+| file | gives | licence |
+|---|---|---|
+| DB-IP Lite country (~5 MB, monthly) | the flags below | CC BY 4.0 (credited on the page) |
+| iptoasn.com ip2asn (~11 MB, hourly) | each device's network: ISP names, mobile-carrier detection | public domain |
+
+```bash
+python3 scripts/fetch-geoip.py     # both -> data/geo/   (--only geo | --only asn)
+docker compose up -d               # compose mounts ./data/geo into the app
+```
+
+Re-run it from cron to refresh; the app picks up new files without a restart. Either
+file is optional — without it that feature is simply off. A node's tooltip then also
+shows its network (`AS3243 MEO…`).
+
+### Flags
 
 Each site shows a flag beside its name — on the map, in the Sites table and in a
 node's tooltip. Docker gets 🐳 and the roaming site 📱, since neither is in a
@@ -157,15 +185,8 @@ copy of the free [DB-IP Lite](https://db-ip.com/db/download/ip-to-country-lite)
 country database. Nothing is sent anywhere: you download the file, the app reads
 it. A site takes the country most of its devices resolve to.
 
-```bash
-python3 scripts/fetch-geoip.py     # -> data/geo/dbip-country-lite.csv.gz (~5 MB)
-docker compose up -d               # compose mounts ./data/geo into the app
-```
-
-DB-IP publishes monthly. Re-run the script (cron is fine) and the app picks up the
-new file without a restart. Without the file the feature is simply off: no flags
-except Docker/roaming, and no error. The page credits DB-IP wherever the data is used
-(CC BY 4.0).
+Without the country file there are no flags except Docker/roaming, and no error. The
+page credits DB-IP whenever it is loaded.
 
 To force or supply a flag — say, for a site that has no public address on record —
 add `country = "PT"` to its `[[site]]` block.

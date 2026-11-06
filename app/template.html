@@ -500,6 +500,7 @@
           n.siteLabel) + row('tailscale', n.ip) +
       // routers serve their own LANs; what places them is the uplink they got
       row(n.lanKind === 'uplink' ? 'uplink' : 'local', n.lan) +
+      (n.isp ? row('network', n.isp) : '') +
       row('os', n.os) +
       // a shared-in node isn't yours: it has no tag/owner in YOUR tailnet
       row('owner', n.sharedIn ? 'another tailnet' :

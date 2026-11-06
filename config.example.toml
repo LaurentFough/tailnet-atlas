@@ -22,6 +22,14 @@ pinned_roaming = ["cloud-exit"]
 # site_mode = "manual"
 #
 # auto mode only:
+#   Mobile carriers. A cluster with no anchor whose devices are mostly on a mobile
+#   network is roaming, however many laptops share the tether. "Mobile network" is
+#   judged from the ASN file (scripts/fetch-geoip.py): a name that says mobile /
+#   cellular / LTE counts, and so do the ASNs you list. The name check is only a
+#   hint — it misses carriers that do not say so ("Vodafone Idea") and can hit
+#   non-carriers — so list what you know. `not_mobile_asns` wins over both.
+# mobile_asns     = [38266]
+# not_mobile_asns = [1766]
 #   A cluster becomes a site if it has an anchor (a server, exit node,
 #   home-tagged device or subnet router) or at least this many devices that are
 #   not phones/tablets. Anything else is roaming. One phone or laptop at a café

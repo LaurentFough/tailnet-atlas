@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+import asn
 import geo
 
 log = logging.getLogger("render")
@@ -342,6 +343,14 @@ class Tailnet:
         self.auto = str(self.cfg.get("site_mode", "manual")).lower() == "auto"
         self.min_site_devices = max(1, int(self.cfg.get("min_site_devices", 2)))
         self.hotspot_prefixes = tuple(multi(self.cfg.get("hotspot_nets"))) or HOTSPOT_PREFIXES
+        # Networks (ASNs) that count as mobile carriers. The name heuristic in asn.py
+        # is only a hint; these lists are the authority and win over it.
+        def _asns(key: str) -> set[int]:
+            try:
+                return {int(x) for x in (self.cfg.get(key) or [])}
+            except (TypeError, ValueError):
+                raise SystemExit(f"[{self.slug}] {key} must be a list of AS numbers")
+        self.mobile_asns, self.not_mobile_asns = _asns("mobile_asns"), _asns("not_mobile_asns")
         # `country = "PT"` on a [[site]] overrides the flag that would be voted
         # from its devices' public addresses (or supplies one when there is no
         # GeoIP file). ISO 3166-1 alpha-2.
@@ -513,6 +522,8 @@ class Tailnet:
             pubs = self.public_addrs(d)
             # first public address the GeoIP file knows; "" when none does
             out[-1]["cc"] = next((c for c in map(geo.country, pubs) if c), "")
+            # the network (ASN) its first resolvable public address belongs to
+            out[-1]["isp"] = next((r for r in map(asn.lookup, pubs) if r), None)
             if self.auto:
                 out[-1]["_pool"] = self.private_v4(d)
                 out[-1]["_pubs"] = pubs
@@ -527,6 +538,16 @@ class Tailnet:
         return out
 
     # ------------------------------------------------- automatic sites
+    def is_mobile_net(self, isp: tuple[int, str] | None) -> bool:
+        """Is this (ASN, name) a mobile carrier? Config lists first, then the
+        name heuristic. Unknown network -> False: no evidence is not evidence."""
+        if not isp:
+            return False
+        n, desc = isp
+        if n in self.not_mobile_asns:
+            return False
+        return n in self.mobile_asns or asn.looks_mobile(desc)
+
     def assign_sites(self, devs: list[dict]) -> None:
         """Place every device that no explicit rule claimed (`site is None`).
 
@@ -580,8 +601,8 @@ class Tailnet:
         shared = {k for k, n in Counter(m["_lan"] for m in metas if m["_lan"]).items() if n > 1}
         for m in metas:
             if m["_lan"] in shared:
-                m["label"] = m["_anchor"] or m["_key"]
-            for k in ("_lan", "_anchor", "_key"):
+                m["label"] = m["_anchor"] or m["_org"] or m["_key"]
+            for k in ("_lan", "_anchor", "_key", "_org"):
                 m.pop(k)
 
         for d in todo:
@@ -623,6 +644,14 @@ class Tailnet:
             for d in grp:
                 d["site"] = pin
             return None
+        # Most devices on a carrier network, and nothing anchoring them: roaming,
+        # however many laptops share the tether. (An anchor — a server on an LTE
+        # router, say — keeps it a place: plenty of homes ARE on a mobile uplink.)
+        infos = [d["isp"] for d in grp if d.get("isp")]
+        if not anchors and infos and 2 * sum(map(self.is_mobile_net, infos)) > len(infos):
+            for d in grp:
+                d["site"] = "mobile"
+            return None
         if not anchors and len(people) < self.min_site_devices:
             for d in grp:
                 d["site"] = "mobile"
@@ -633,13 +662,19 @@ class Tailnet:
             str(ipaddress.ip_network(f"{ip}/24", strict=False))
             for d in grp for ip in d["_pool"] if not DOCKER_RE.match(ip)).most_common(2)]
         a0 = anchors[0]["name"] if anchors else None
-        label = (f"{a0} · {lan[0]}" if a0 and lan else a0 or (lan[0] if lan else keys[0]))
+        isp = Counter(i for i in infos).most_common(1)
+        isp = isp[0][0] if isp else None
+        isp_name = asn.org(isp[1])[:28] if isp else None
+        # a site with no anchor is best named after who connects it
+        label = (f"{a0} · {lan[0]}" if a0 and lan else a0 or isp_name or (lan[0] if lan else keys[0]))
         meta = {"label": label,
-                "net": ", ".join(lan + [f"via {keys[0]}"]),
+                "net": ", ".join(lan + [f"via {keys[0]}" + (
+                    f" · AS{isp[0]} {isp_name}" if isp else "")]),
                 "fx": round(0.12 + (h % 1000) / 1000 * 0.76, 3),
                 "fy": round(0.20 + ((h // 1000) % 1000) / 1000 * 0.62, 3),
                 "tint": SITE_TINTS[(h // 1000000) % len(SITE_TINTS)],
-                "_lan": lan[0] if lan else None, "_anchor": a0, "_key": keys[0]}
+                "_lan": lan[0] if lan else None, "_anchor": a0, "_key": keys[0],
+                "_org": isp_name}
         for d in grp:
             d["site"] = "a-" + digest[:6]
             d["siteMeta"] = meta
@@ -937,6 +972,13 @@ class Tailnet:
              f"({net('IPv4')}, or the {net('IPv6 /64')}) are one place.",
              "Private addresses repeat across every home and café; the public "
              "address does not."),
+            ("Mobile network",
+             "No anchor, and most devices are on a mobile carrier's network (by "
+             f"{len(self.mobile_asns)} listed ASN{'s' if len(self.mobile_asns) != 1 else ''} "
+             "or a name that says mobile/cellular/LTE) — roaming, however many devices.",
+             "Needs the ASN file. A server or other anchor on a mobile uplink "
+             "still makes a place. Names are a hint; `mobile_asns` and "
+             "`not_mobile_asns` in the config decide."),
             ("A place needs",
              "an anchor — a server, exit node, home-tagged device or subnet router "
              f"— or at least {self.min_site_devices} devices that are not phones or tablets.",
@@ -1013,7 +1055,9 @@ class Tailnet:
                     # many. "sharedIn" is the unrelated, real Tailscale feature:
                     # this node belongs to another tailnet and was shared here.
                     "exposed": d["id"] in access, "access": access.get(d["id"], []),
-                    "sharedIn": d["sharedIn"]}
+                    "sharedIn": d["sharedIn"],
+                    # "AS3243 MEO - ..." — who connects this device, for the tooltip
+                    "isp": (f"AS{d['isp'][0]} {asn.org(d['isp'][1])[:34]}" if d.get("isp") else "")}
                    for d in devs]
 
         return {
